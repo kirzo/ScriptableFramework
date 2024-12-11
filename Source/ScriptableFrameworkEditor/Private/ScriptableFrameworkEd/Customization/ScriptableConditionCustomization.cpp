@@ -1,3 +1,5 @@
+// Copyright Kirzo. All Rights Reserved.
+
 #include "ScriptableConditionCustomization.h"
 
 #define LOCTEXT_NAMESPACE "FScriptableConditionCustomization"
