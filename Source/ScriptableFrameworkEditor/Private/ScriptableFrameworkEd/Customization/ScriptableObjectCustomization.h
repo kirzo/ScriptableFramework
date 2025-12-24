@@ -35,9 +35,11 @@ protected:
 	ECheckBoxState GetEnabledCheckBoxState() const;
 	void OnEnabledCheckBoxChanged(ECheckBoxState NewCheckedState);
 
-	void OnNodePicked(const UStruct* InStruct);
+	void OnNodePicked(const UStruct* InStruct, const FAssetData& InAssetData);
 
 	void SetScriptableObjectType(const UStruct* InStruct);
+	void OnAssetPicked(const FAssetData& AssetData);
+
 	void OnUseSelected();
 	void OnBrowseTo();
 	void OnEdit();

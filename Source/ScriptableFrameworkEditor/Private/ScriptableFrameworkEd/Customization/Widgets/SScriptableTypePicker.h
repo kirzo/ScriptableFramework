@@ -20,9 +20,8 @@ class SSearchBox;
 class SScriptableTypePicker : public SComboButton
 {
 public:
+	DECLARE_DELEGATE_TwoParams(FOnNodeTypePicked, const UStruct*, const FAssetData&);
 
-	DECLARE_DELEGATE_OneParam(FOnNodeStructPicked, const UStruct*);
-	
 	SLATE_BEGIN_ARGS(SScriptableTypePicker)
 		: _Content()
 		, _ComboBoxStyle(&FAppStyle::Get().GetWidgetStyle<FComboBoxStyle>("ComboBox"))
@@ -82,7 +81,7 @@ public:
 		/** Filter */
 		SLATE_ARGUMENT(FString, Filter)
 		/** Callback to call when a type is selected. */
-		SLATE_ARGUMENT(FOnNodeStructPicked, OnNodeTypePicked)
+		SLATE_ARGUMENT(FOnNodeTypePicked, OnNodeTypePicked)
 	SLATE_END_ARGS()
 
 	SScriptableTypePicker();
@@ -105,6 +104,7 @@ private:
 		FSlateIcon Icon;
 		FSlateColor IconColor;
 		TArray<TSharedPtr<FScriptableTypeItem>> Children;
+		FAssetData AssetData;
 	};
 
 	// Stores per session node expansion state for a node type.
@@ -145,8 +145,8 @@ private:
 	TSharedPtr<STreeView<TSharedPtr<FScriptableTypeItem>>> NodeTypeTree;
 	bool bIsRestoringExpansion = false;
 
-	FOnNodeStructPicked OnNodeStructPicked;
-	
+	FOnNodeTypePicked OnNodeTypePicked;
+
 	/** The item style to use. */
 	const FTableRowStyle* ItemStyle;
 

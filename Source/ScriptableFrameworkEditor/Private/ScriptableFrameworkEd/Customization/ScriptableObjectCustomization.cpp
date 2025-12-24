@@ -14,8 +14,6 @@
 #include "UObject/Field.h"
 #include "IPropertyUtilities.h"
 
-UE_DISABLE_OPTIMIZATION
-
 #define LOCTEXT_NAMESPACE "FScriptableObjectCustomization"
 
 void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> InPropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils)
@@ -66,7 +64,7 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 				.FilterCategoryMeta(PropCategory)
 				.Filter(PropertyHandle->GetMetaData(PropCategory))
 				.BaseClass(GetBaseClass())
-				.OnNodeTypePicked(SScriptableTypePicker::FOnNodeStructPicked::CreateSP(this, &FScriptableObjectCustomization::OnNodePicked))
+				.OnNodeTypePicked(SScriptableTypePicker::FOnNodeTypePicked::CreateSP(this, &FScriptableObjectCustomization::OnNodePicked))
 				[
 					SNew(STextBlock)
 						.Font(IPropertyTypeCustomizationUtils::GetRegularFont())
@@ -178,9 +176,16 @@ void FScriptableObjectCustomization::OnEnabledCheckBoxChanged(ECheckBoxState New
 	}
 }
 
-void FScriptableObjectCustomization::OnNodePicked(const UStruct* InStruct)
+void FScriptableObjectCustomization::OnNodePicked(const UStruct* InStruct, const FAssetData& InAssetData)
 {
-	SetScriptableObjectType(InStruct);
+	if (InAssetData.IsValid())
+	{
+		OnAssetPicked(InAssetData);
+	}
+	else if (InStruct)
+	{
+		SetScriptableObjectType(InStruct);
+	}
 }
 
 void FScriptableObjectCustomization::SetScriptableObjectType(const UStruct* NewType)
@@ -207,6 +212,48 @@ void FScriptableObjectCustomization::SetScriptableObjectType(const UStruct* NewT
 		{
 			PropertyUtilities->ForceRefresh();
 		}
+	}
+}
+
+void FScriptableObjectCustomization::OnAssetPicked(const FAssetData& AssetData)
+{
+	UClass* WrapperClass = nullptr;
+	FName PropertyName = NAME_None;
+
+	if (AssetData.AssetClassPath.GetAssetName() == "ScriptableTaskAsset")
+	{
+		WrapperClass = FindObject<UClass>(nullptr, TEXT("/Script/ScriptableFramework.ScriptableTask_RunAsset"));
+		PropertyName = FName("AssetToRun");
+	}
+	else if (AssetData.AssetClassPath.GetAssetName() == "ScriptableConditionAsset")
+	{
+		WrapperClass = FindObject<UClass>(nullptr, TEXT("/Script/ScriptableFramework.ScriptableCondition_Asset"));
+		PropertyName = FName("AssetToEvaluate");
+	}
+
+	if (WrapperClass)
+	{
+		GEditor->BeginTransaction(LOCTEXT("SetScriptableAsset", "Set Scriptable Asset"));
+		PropertyHandle->NotifyPreChange();
+
+		PropertyCustomizationHelpers::CreateNewInstanceOfEditInlineObjectClass(PropertyHandle.ToSharedRef(), WrapperClass, EPropertyValueSetFlags::InteractiveChange);
+
+		UObject* NewObj = nullptr;
+		if (PropertyHandle->GetValue(NewObj) == FPropertyAccess::Success && NewObj)
+		{
+			if (FObjectProperty* AssetProp = CastField<FObjectProperty>(WrapperClass->FindPropertyByName(PropertyName)))
+			{
+				void* ValuePtr = AssetProp->ContainerPtrToValuePtr<void>(NewObj);
+				AssetProp->SetObjectPropertyValue(ValuePtr, AssetData.GetAsset());
+			}
+		}
+
+		PropertyHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
+		PropertyHandle->NotifyFinishedChangingProperties();
+		GEditor->EndTransaction();
+
+		FSlateApplication::Get().DismissAllMenus();
+		if (PropertyUtilities) PropertyUtilities->ForceRefresh();
 	}
 }
 
@@ -255,5 +302,3 @@ void FScriptableObjectCustomization::OnClear()
 }
 
 #undef LOCTEXT_NAMESPACE
-
-UE_ENABLE_OPTIMIZATION

@@ -8,10 +8,14 @@
 #include "Styling/SlateIconFinder.h"
 #include "Widgets/Input/SSearchBox.h"
 #include "Modules/ModuleManager.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+
+#include "ScriptableTasks/ScriptableTask.h"
+#include "ScriptableTasks/ScriptableTaskAsset.h"
+#include "ScriptableConditions/ScriptableCondition.h"
+#include "ScriptableConditions/ScriptableConditionAsset.h"
 
 #define LOCTEXT_NAMESPACE "ScriptableFrameworkEditor"
-
-UE_DISABLE_OPTIMIZATION
 
 TMap<FObjectKey, SScriptableTypePicker::FCategoryExpansionState> SScriptableTypePicker::CategoryExpansionStates;
 
@@ -38,7 +42,7 @@ void SScriptableTypePicker::Construct(const SScriptableTypePicker::FArguments& I
 	const FComboButtonStyle& OurComboButtonStyle = InArgs._ComboBoxStyle->ComboButtonStyle;
 	const FButtonStyle* const OurButtonStyle = InArgs._ButtonStyle ? InArgs._ButtonStyle : &OurComboButtonStyle.ButtonStyle;
 
-	OnNodeStructPicked = InArgs._OnNodeTypePicked;
+	OnNodeTypePicked = InArgs._OnNodeTypePicked;
 	CategoryKey = FObjectKey(InArgs._BaseScriptStruct);
 
 	ClassCategoryMeta = InArgs._ClassCategoryMeta;
@@ -352,13 +356,13 @@ void SScriptableTypePicker::CacheTypes(const UScriptStruct* BaseScriptStruct, co
 
 	TArray<TSharedPtr<FScriptableTypeData>> StructNodes;
 	TArray<TSharedPtr<FScriptableTypeData>> ObjectNodes;
-	
+
 	TypeCache->GetScripStructs(BaseScriptStruct, StructNodes);
 	TypeCache->GetClasses(BaseClass, ObjectNodes);
 
 	// Create tree of node types based on category.
 	RootNode = MakeShared<FScriptableTypeItem>();
-	
+
 	for (const TSharedPtr<FScriptableTypeData>& Data : StructNodes)
 	{
 		if (const UScriptStruct* ScriptStruct = Data->GetScriptStruct())
@@ -406,6 +410,72 @@ void SScriptableTypePicker::CacheTypes(const UScriptStruct* BaseScriptStruct, co
 		}
 	}
 
+	// Determine which asset class to search for based on the picker's base class.
+	UClass* AssetClassToSearch = nullptr;
+
+	if (BaseClass && BaseClass->IsChildOf(UScriptableTask::StaticClass()))
+	{
+		AssetClassToSearch = UScriptableTaskAsset::StaticClass();
+	}
+	else if (BaseClass && BaseClass->IsChildOf(UScriptableCondition::StaticClass()))
+	{
+		AssetClassToSearch = UScriptableConditionAsset::StaticClass();
+	}
+
+	if (AssetClassToSearch)
+	{
+		FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+		TArray<FAssetData> AssetDataList;
+
+		FARFilter Filter;
+		Filter.ClassPaths.Add(AssetClassToSearch->GetClassPathName());
+		Filter.bRecursivePaths = true;
+
+		// Filter by path if you want to limit the search scope (e.g. only inside /Game).
+		// Filter.PackagePaths.Add("/Game"); 
+
+		AssetRegistryModule.Get().GetAssets(Filter, AssetDataList);
+
+		// Add found assets to the tree.
+		for (const FAssetData& Asset : AssetDataList)
+		{
+			// Create a virtual root category "Project Assets" to group them.
+			TArray<FString> CategoryPath;
+			CategoryPath.Add(TEXT("Project Assets"));
+
+			// Use the asset's folder path as subcategories
+			FString PathStr = Asset.PackagePath.ToString();
+
+			// Remove the "/Game/" prefix to avoid redundant top-level categories.
+			if (PathStr.StartsWith(TEXT("/Game/")))
+			{
+				PathStr.RemoveFromStart(TEXT("/Game/"));
+			}
+
+			// Split the path into the category array (e.g., "Folder/SubFolder" -> ["Folder", "SubFolder"]).
+			if (!PathStr.IsEmpty())
+			{
+				PathStr.ParseIntoArray(CategoryPath, TEXT("/"), true);
+			}
+
+			// Find or create the category structure in the tree.
+			TSharedPtr<FScriptableTypeItem> ParentItem = RootNode;
+			for (int32 i = 0; i < CategoryPath.Num(); ++i)
+			{
+				// Note: using MakeArrayView with index to pass a valid mutable view to the helper function.
+				ParentItem = FindOrCreateItemForCategory(ParentItem->Children, MakeArrayView(CategoryPath.GetData(), i + 1));
+			}
+
+			// Add the leaf node (the actual Asset).
+			TSharedPtr<FScriptableTypeItem> NewItem = ParentItem->Children.Add_GetRef(MakeShared<FScriptableTypeItem>());
+			NewItem->AssetData = Asset;
+
+			// Use the specific icon for the asset class (Task or Condition).
+			NewItem->Icon = FSlateIconFinder::FindIconForClass(AssetClassToSearch);
+			NewItem->IconColor = FLinearColor::White;
+		}
+	}
+
 	SortNodeTypesFunctionItemsRecursive(RootNode->Children);
 
 	FilteredRootNode = RootNode;
@@ -417,6 +487,10 @@ TSharedRef<ITableRow> SScriptableTypePicker::GenerateNodeTypeRow(TSharedPtr<FScr
 	if (Item->IsCategory())
 	{
 		DisplayName = FText::FromString(Item->GetCategoryName());
+	}
+	else if (Item->AssetData.IsValid())
+	{
+		DisplayName = FText::FromName(Item->AssetData.AssetName);
 	}
 	else
 	{
@@ -513,10 +587,9 @@ void SScriptableTypePicker::OnNodeTypeSelected(TSharedPtr<FScriptableTypeItem> S
 		return;
 	}
 
-	if (!SelectedItem->IsCategory()
-		&& OnNodeStructPicked.IsBound())
+	if (!SelectedItem->IsCategory() && OnNodeTypePicked.IsBound())
 	{
-		OnNodeStructPicked.Execute(SelectedItem->Struct);
+		OnNodeTypePicked.Execute(SelectedItem->Struct, SelectedItem->AssetData);
 	}
 }
 
@@ -740,5 +813,3 @@ void SScriptableTypePicker::RestoreExpansionState()
 }
 
 #undef LOCTEXT_NAMESPACE
-
-UE_ENABLE_OPTIMIZATION
