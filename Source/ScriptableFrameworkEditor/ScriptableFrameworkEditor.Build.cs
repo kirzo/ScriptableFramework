@@ -26,8 +26,7 @@ public class ScriptableFrameworkEditor : ModuleRules
                 "UnrealEd",
                 "PropertyEditor",
                 "InputCore",
-                "BlueprintGraph",
-                "KismetWidgets",
+                "Projects"
             }
             );
     }

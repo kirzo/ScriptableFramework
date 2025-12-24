@@ -4,6 +4,7 @@
 
 #include "ScriptableFrameworkEditor.h"
 #include "ScriptableTypeCache.h"
+#include "ScriptableFrameworkEditorStyle.h"
 #include "AssetTools/AssetTypeActions_ScriptableObjectBase.h"
 
 #include "ScriptableTasks/ScriptableTask.h"
@@ -20,6 +21,8 @@
 
 void FScriptableFrameworkEditorModule::StartupModule()
 {
+	FScriptableFrameworkEditorStyle::Initialize();
+
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
 	ScriptableAssetCategoryBit = AssetTools.RegisterAdvancedAssetCategory("ScriptableFramework", INVTEXT("Scriptable Framework"));
 
@@ -31,6 +34,8 @@ void FScriptableFrameworkEditorModule::ShutdownModule()
 {
 	UnregisterAssetTools();
 	UnregisterPropertyLayouts();
+
+	FScriptableFrameworkEditorStyle::Shutdown();
 }
 
 TSharedPtr<FScriptableTypeCache> FScriptableFrameworkEditorModule::GetScriptableTypeCache()
