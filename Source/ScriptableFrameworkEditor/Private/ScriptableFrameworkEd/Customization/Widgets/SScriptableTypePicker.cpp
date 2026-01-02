@@ -2,8 +2,9 @@
 
 #include "SScriptableTypePicker.h"
 
-#include "ScriptableFrameworkEditorHelpers.h"
 #include "ScriptableFrameworkEditor.h"
+#include "ScriptableFrameworkEditorHelpers.h"
+#include "ScriptableFrameworkEditorStyle.h"
 #include "ScriptableTypeCache.h"
 #include "Styling/SlateIconFinder.h"
 #include "Widgets/Input/SSearchBox.h"
@@ -470,9 +471,27 @@ void SScriptableTypePicker::CacheTypes(const UScriptStruct* BaseScriptStruct, co
 			TSharedPtr<FScriptableTypeItem> NewItem = ParentItem->Children.Add_GetRef(MakeShared<FScriptableTypeItem>());
 			NewItem->AssetData = Asset;
 
-			// Use the specific icon for the asset class (Task or Condition).
-			NewItem->Icon = FSlateIconFinder::FindIconForClass(AssetClassToSearch);
-			NewItem->IconColor = FLinearColor::White;
+			FName IconName = NAME_None;
+
+			if (AssetClassToSearch->IsChildOf(UScriptableTaskAsset::StaticClass()))
+			{
+				IconName = "ClassIcon.ScriptableTaskAsset";
+			}
+			else if (AssetClassToSearch->IsChildOf(UScriptableConditionAsset::StaticClass()))
+			{
+				IconName = "ClassIcon.ScriptableConditionAsset";
+			}
+
+			if (!IconName.IsNone())
+			{
+				NewItem->Icon = FSlateIcon(FScriptableFrameworkEditorStyle::GetStyleSetName(), IconName);
+				NewItem->IconColor = FLinearColor::White;
+			}
+			else
+			{
+				NewItem->Icon = FSlateIconFinder::FindIconForClass(AssetClassToSearch);
+				NewItem->IconColor = FLinearColor::White;
+			}
 		}
 	}
 
@@ -507,28 +526,19 @@ TSharedRef<ITableRow> SScriptableTypePicker::GenerateNodeTypeRow(TSharedPtr<FScr
 	FSlateColor IconColor;
 	if (!Item->IsCategory())
 	{
-		if (const UClass* ItemClass = Cast<UClass>(Item->Struct))
+		if (Item->Icon.IsSet())
 		{
-			if (Item->Icon.IsSet())
-			{
-				Icon = Item->Icon.GetIcon();
-			}
-			else
-			{
-				Icon = FSlateIconFinder::FindIconBrushForClass(ItemClass); 
-			}
+			Icon = Item->Icon.GetIcon();
+			IconColor = Item->IconColor;
+		}
+		else if (const UClass* ItemClass = Cast<UClass>(Item->Struct))
+		{
+			Icon = FSlateIconFinder::FindIconBrushForClass(ItemClass);
 			IconColor = Item->IconColor;
 		}
 		else if (const UScriptStruct* ItemScriptStruct = Cast<UScriptStruct>(Item->Struct))
 		{
-			if (Item->Icon.IsSet())
-			{
-				Icon = Item->Icon.GetIcon();
-			}
-			else
-			{
-				Icon = FSlateIconFinder::FindIconBrushForClass(UScriptStruct::StaticClass());
-			}
+			Icon = FSlateIconFinder::FindIconBrushForClass(UScriptStruct::StaticClass());
 			IconColor = Item->IconColor;
 		}
 		else
