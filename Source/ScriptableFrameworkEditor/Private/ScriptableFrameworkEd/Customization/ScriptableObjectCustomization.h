@@ -1,4 +1,4 @@
-// Copyright 2025 kirzo
+// Copyright 2026 kirzo
 
 #pragma once
 
@@ -8,6 +8,7 @@
 class IPropertyHandle;
 class IPropertyUtilities;
 class UScriptableObject;
+class SWidget;
 
 class FScriptableObjectCustomization : public IPropertyTypeCustomization
 {
@@ -44,4 +45,11 @@ protected:
 	void OnBrowseTo();
 	void OnEdit();
 	void OnClear();
+
+private:
+	/** Checks if a property is suitable for binding. */
+	bool IsPropertyExtendable(TSharedPtr<IPropertyHandle> InPropertyHandle) const;
+
+	/** Generates the binding widget (the drop-down menu) for a specific property. */
+	TSharedPtr<SWidget> GenerateBindingWidget(UScriptableObject* InScriptableObject, TSharedPtr<IPropertyHandle> InPropertyHandle);
 };

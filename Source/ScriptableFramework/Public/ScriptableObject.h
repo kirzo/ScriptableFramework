@@ -8,13 +8,15 @@
 #include "ScriptableObjectTypes.h"
 #include "PropertyBindingPath.h"
 #include "Bindings/ScriptablePropertyBindings.h"
-#include "Bindings/ScriptablePropertyBindingsOwner.h"
 #include "ScriptableObject.generated.h"
 
 SCRIPTABLEFRAMEWORK_API DECLARE_LOG_CATEGORY_EXTERN(LogScriptableObject, Log, All);
 
+struct FBindableStructDesc;
+
+/** Base class for all scriptable objects in the framework. */
 UCLASS(Abstract, DefaultToInstanced, EditInlineNew, Blueprintable, BlueprintType, HideCategories = (Hidden), CollapseCategories)
-class SCRIPTABLEFRAMEWORK_API UScriptableObject : public UObject, public IScriptablePropertyBindingsOwner
+class SCRIPTABLEFRAMEWORK_API UScriptableObject : public UObject
 {
 	GENERATED_BODY()
 
@@ -79,10 +81,14 @@ public:
 	/** Resolves and applies bindings (copies data from the context to the properties). */
 	void ResolveBindings();
 
-	// ~Begin IScriptablePropertyBindingsOwner
-	virtual FScriptablePropertyBindings* GetPropertyBindings() override { return &PropertyBindings; }
-	virtual void GetAccessibleStructs(const UObject* TargetOuterObject, TArray<FBindableStructDesc>& OutStructDescs) const override;
-	// ~End IScriptablePropertyBindingsOwner
+	/** Retrieves the structs accessible for binding from this object. */
+	virtual void GetAccessibleStructs(const UObject* TargetOuterObject, TArray<FBindableStructDesc>& OutStructDescs) const;
+
+#if WITH_EDITOR
+	/** Accessor for the editor module to modify bindings directly. */
+	FScriptablePropertyBindings& GetPropertyBindings() { return PropertyBindings; }
+	const FScriptablePropertyBindings& GetPropertyBindings() const { return PropertyBindings; }
+#endif
 
 	/** Register this object. */
 	void Register(UObject* Owner);
