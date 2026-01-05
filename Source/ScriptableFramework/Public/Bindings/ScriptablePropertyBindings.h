@@ -6,33 +6,30 @@
 #include "PropertyBindingPath.h"
 #include "ScriptablePropertyBindings.generated.h"
 
-/**
- * Defines a single binding: Copy from SourcePath -> TargetPath
- */
+/** Defines a single binding: Copy from SourcePath -> TargetPath */
 USTRUCT()
 struct SCRIPTABLEFRAMEWORK_API FScriptablePropertyBinding
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditDefaultsOnly, Category = Binding)
+	UPROPERTY()
 	FPropertyBindingPath SourcePath;
 
-	UPROPERTY(EditDefaultsOnly, Category = Binding)
+	UPROPERTY()
 	FPropertyBindingPath TargetPath;
 };
 
-/**
- * Container for all property bindings of an object.
- */
+/** Container for all property bindings of an object. */
 USTRUCT()
 struct SCRIPTABLEFRAMEWORK_API FScriptablePropertyBindings
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditDefaultsOnly, Category = Bindings)
-	TArray<FScriptablePropertyBinding> Bindings;
+public:
+#if WITH_EDITOR
+	// Type Compatibility (Delegates to Unreal's property system)
+	static bool ArePropertiesCompatible(const FProperty* SourceProp, const FProperty* TargetProp);
 
-	// Editor Helpers
 	void AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath);
 	void RemovePropertyBindings(const FPropertyBindingPath& TargetPath);
 	bool HasPropertyBinding(const FPropertyBindingPath& TargetPath) const;
@@ -43,8 +40,7 @@ struct SCRIPTABLEFRAMEWORK_API FScriptablePropertyBindings
 	 * @return Pointer to the source path if found, nullptr otherwise.
 	 */
 	const FPropertyBindingPath* GetPropertyBinding(const FPropertyBindingPath& TargetPath) const;
-
-	void CopySingleBinding(const FScriptablePropertyBinding& Binding, const FPropertyBindingDataView& SrcView, const FPropertyBindingDataView& DestView);
+#endif
 
 	/**
 	 * Resolves all bindings and copies values to the TargetObject.
@@ -52,6 +48,9 @@ struct SCRIPTABLEFRAMEWORK_API FScriptablePropertyBindings
 	 */
 	void ResolveBindings(class UScriptableObject* TargetObject);
 
-	// Type Compatibility (Delegates to Unreal's property system)
-	static bool ArePropertiesCompatible(const FProperty* SourceProp, const FProperty* TargetProp);
+private:
+	UPROPERTY()
+	TArray<FScriptablePropertyBinding> Bindings;
+
+	void CopySingleBinding(const FScriptablePropertyBinding& Binding, const FPropertyBindingDataView& SrcView, const FPropertyBindingDataView& DestView);
 };

@@ -23,77 +23,118 @@ class SCRIPTABLEFRAMEWORK_API UScriptableObject : public UObject
 
 	friend class UScriptableCondition;
 
-protected:
-	/** Indicates if this object is currently registered with a scene. */
-	uint8 bRegistered : 1 = false;
-
-	UPROPERTY(EditDefaultsOnly, Category = Tick)
-	uint8 bCanEverTick : 1 = false;
-
-	/** Main tick function for the object */
-	UPROPERTY(EditDefaultsOnly, Category = Tick, meta = (ShowOnlyInnerProperties))
-	FScriptableObjectTickFunction PrimaryObjectTick;
-
-	UPROPERTY(EditAnywhere, Category = Hidden)
-	uint8 bEnabled : 1 = true;
-
-	/** Input data (Context) available for this object and its children. */
-	UPROPERTY(EditDefaultsOnly, Category = "Context", meta = (FixedLayout, NoBinding))
-	FInstancedPropertyBag Context;
-
-private:
-	/**
-	 * Unique identifier for this object instance.
-	 * Used to resolve property bindings at runtime.
-	 */
-	UPROPERTY()
-	FGuid BindingID;
-
-	/** Data bindings definition (which property copies from where). */
-	UPROPERTY()
-	FScriptablePropertyBindings PropertyBindings;
-
-	/**
-	 * Map for O(1) runtime lookup of tasks by their persistent ID.
-	 * Only populated on the Root object of the hierarchy.
-	 * Transient because it is rebuilt dynamically via Register().
-	 */
-	UPROPERTY(Transient)
-	TMap<FGuid, TObjectPtr<UScriptableObject>> BindingSourceMap;
-
-	/** Cached pointer to owning object */
-	UObject* OwnerPrivate;
-
-	/**
-	 * Pointer to the world that this object is currently registered with.
-	 * This is only non-NULL when the object is registered.
-	 */
-	UWorld* WorldPrivate;
-
-	/** If WorldPrivate isn't set this will determine the world from outers */
-	UWorld* GetWorld_Uncached() const;
-
-	FDelegateHandle OnWorldBeginTearDownHandle;
-	void OnWorldBeginTearDown(UWorld* InWorld);
-
 public:
 	UScriptableObject();
 
 	virtual void PostInitProperties() override;
 	virtual void PostLoad() override;
+	virtual UWorld* GetWorld() const override final { return (WorldPrivate ? WorldPrivate : GetWorld_Uncached()); }
 
+	// -------------------------------------------------------------------
+	//  Registration & Lifecycle
+	// -------------------------------------------------------------------
+public:
+	/** Register this object with an owner and world. */
+	void Register(UObject* Owner);
+
+	/** Unregister this object. */
+	void Unregister();
+
+	/** Registers an object with a specific world manually. */
+	void RegisterObjectWithWorld(UWorld* InWorld);
+
+	/** See if this object is currently registered. */
+	FORCEINLINE virtual bool IsRegistered() const { return bRegistered; }
+
+	/** Returns true if the object is enabled. */
 	FORCEINLINE bool IsEnabled() const { return bEnabled; }
 
-	/** See if this component is currently registered */
-	FORCEINLINE bool virtual IsRegistered() const { return bRegistered; }
+protected:
+	/** Called when an object is registered. Override to initialize logic. */
+	virtual void OnRegister() {}
+
+	/** Called when a object is unregistered. Override to cleanup logic. */
+	virtual void OnUnregister() {}
+
+	// -------------------------------------------------------------------
+	//  Hierarchy & Ownership
+	// -------------------------------------------------------------------
+public:
+	UFUNCTION(BlueprintCallable, Category = ScriptableObject)
+	UScriptableObject* GetRoot() const;
+
+	UFUNCTION(BlueprintCallable, Category = ScriptableObject)
+	FORCEINLINE_DEBUGGABLE UObject* GetOwner() const { return OwnerPrivate; }
+
+	UFUNCTION(BlueprintCallable, Category = ScriptableObject)
+	FORCEINLINE_DEBUGGABLE AActor* GetOwnerActor() const { return GetOwner<AActor>(); }
+
+	/** Templated version of GetOwner(), will return nullptr if cast fails */
+	template<class T>
+	T* GetOwner() const { return Cast<T>(GetOwner()); }
+
+	// -------------------------------------------------------------------
+	//  Ticking System
+	// -------------------------------------------------------------------
+public:
+	virtual void Tick(float DeltaTime);
+
+	/** Set up a tick function. Returns true if criteria met. */
+	bool SetupTickFunction(struct FTickFunction* TickFunction);
 
 	FORCEINLINE virtual bool CanEverTick() const { return bCanEverTick; }
 	FORCEINLINE virtual bool IsReadyToTick() const { return true; }
 
+protected:
+	/** Virtual call chain to register all tick functions */
+	virtual void RegisterTickFunctions(bool bRegister);
+
+	/** Event called every frame if tick is enabled */
+	UFUNCTION(BlueprintImplementableEvent, Category = Tick, meta = (DisplayName = "Tick"))
+	void ReceiveTick(float DeltaSeconds);
+
+	// -------------------------------------------------------------------
+	//  Data Binding & Context
+	// -------------------------------------------------------------------
+public:
 	/** Returns the persistent binding ID. */
 	FGuid GetBindingID() const { return BindingID; }
 
-	/** Registers a object into the binding map. */
+	/** Resolves and applies bindings (copies data from sources to this object). */
+	void ResolveBindings();
+
+	// --- Context Accessors ---
+
+	FInstancedPropertyBag& GetContext() { return Context; }
+	const FInstancedPropertyBag& GetContext() const { return Context; }
+
+	bool HasContextProperty(const FName& Name) const
+	{
+		return Context.FindPropertyDescByName(Name) != nullptr;
+	}
+
+	template <typename T>
+	void AddContextProperty(const FName& Name)
+	{
+		ScriptablePropertyBag::Add<T>(Context, Name);
+	}
+
+	template <typename T>
+	void SetContextProperty(const FName& Name, const T& Value)
+	{
+		ScriptablePropertyBag::Set(Context, Name, Value);
+	}
+
+	template <typename T>
+	T GetContextProperty(const FName& Name) const
+	{
+		auto Result = ScriptablePropertyBag::Get<T>(Context, Name);
+		return Result.HasValue() ? Result.GetValue() : T();
+	}
+
+	// --- Runtime Binding Resolution (Root Only Logic) ---
+
+	/** Registers a object into the O(1) binding map. */
 	void RegisterBindingSource(const FGuid& InID, UScriptableObject* InSource);
 
 	/** Unregisters a task from the binding map. */
@@ -102,121 +143,59 @@ public:
 	/** Finds a registered task by its persistent ID. */
 	UScriptableObject* FindBindingSource(const FGuid& InID);
 
-	/** Finds the root object of the hierarchy. */
-	UFUNCTION(BlueprintCallable, Category = ScriptableObject)
-	UScriptableObject* GetRoot() const;
-
-	/** Returns the mutable reference to the Context property bag. */
-	FInstancedPropertyBag& GetContext() { return Context; }
-	const FInstancedPropertyBag& GetContext() const { return Context; }
-
-	/**
-	 * Checks if the Context has a specific property.
-	 */
-	bool HasContextProperty(const FName& Name) const
-	{
-		return Context.FindPropertyDescByName(Name) != nullptr;
-	}
-
-	/**
-	 * Adds a property definition to the Context without setting a specific value.
-	 * Usage: Task->AddContextProperty<float>(TEXT("Health"));
-	 */
-	template <typename T>
-	void AddContextProperty(const FName& Name)
-	{
-		ScriptablePropertyBag::Add<T>(Context, Name);
-	}
-
-	/**
-	 * Sets a value in the Context Property Bag.
-	 * Automatically adds the property if it doesn't exist.
-	 * Usage: Task->SetContextProperty(TEXT("Health"), 100.0f);
-	 */
-	template <typename T>
-	void SetContextProperty(const FName& Name, const T& Value)
-	{
-		ScriptablePropertyBag::Set(Context, Name, Value);
-	}
-
-	/**
-	 * Retrieves a value from the Context Property Bag.
-	 * Returns a default-constructed value if the property fails or doesn't exist.
-	 * Usage: float Health = Task->GetContextProperty<float>(TEXT("Health"));
-	 */
-	template <typename T>
-	T GetContextProperty(const FName& Name) const
-	{
-		auto Result = ScriptablePropertyBag::Get<T>(Context, Name);
-		if (Result.HasValue())
-		{
-			return Result.GetValue();
-		}
-		return T();
-	}
-
-	/** Resolves and applies bindings (copies data from the context to the properties). */
-	void ResolveBindings();
-
 #if WITH_EDITOR
 	/** Accessor for the editor module to modify bindings directly. */
 	FScriptablePropertyBindings& GetPropertyBindings() { return PropertyBindings; }
 	const FScriptablePropertyBindings& GetPropertyBindings() const { return PropertyBindings; }
 #endif
 
-	/** Register this object. */
-	void Register(UObject* Owner);
-
-	/** Unregister this object. */
-	void Unregister();
-
-	/**
-	 * Registers an object with a specific world.
-	 * @param InWorld - The world to register the object with.
-	 */
-	void RegisterObjectWithWorld(UWorld* InWorld);
-
+	// -------------------------------------------------------------------
+	//  Member Variables
+	// -------------------------------------------------------------------
 protected:
-	/** Called when an object is registered, after Scene is set. */
-	virtual void OnRegister() {}
+	/** Configuration: Enabled state */
+	UPROPERTY(EditAnywhere, Category = Hidden, meta = (NoBinding))
+	uint8 bEnabled : 1 = true;
 
-	/** Called when a object is unregistered. */
-	virtual void OnUnregister() {}
+	/** Configuration: Tick capability */
+	UPROPERTY(EditDefaultsOnly, Category = Tick, meta = (NoBinding))
+	uint8 bCanEverTick : 1 = false;
 
-public:
-	UFUNCTION(BlueprintCallable, Category = ScriptableObject)
-	FORCEINLINE_DEBUGGABLE UObject* GetOwner() const { return OwnerPrivate; }
+	/** Runtime: Registration state */
+	uint8 bRegistered : 1 = false;
 
-	UFUNCTION(BlueprintCallable, Category = ScriptableObject)
-	FORCEINLINE_DEBUGGABLE AActor* GetOwnerActor() const { return GetOwner<AActor>(); }
+	/** Main tick function for the object */
+	UPROPERTY(EditDefaultsOnly, Category = Tick, meta = (ShowOnlyInnerProperties, NoBinding))
+	FScriptableObjectTickFunction PrimaryObjectTick;
 
-	/** Templated version of GetOwner(), will return nullptr if cast fails */
-	template<class T> T* GetOwner() const { return Cast<T>(GetOwner()); }
+private:
+	/** Unique identifier for bindings. Persists across duplication. */
+	UPROPERTY()
+	FGuid BindingID;
 
-	/** Getter for the cached world pointer */
-	virtual UWorld* GetWorld() const override final { return (WorldPrivate ? WorldPrivate : GetWorld_Uncached()); }
+	/** Input data (Context) available for this object and its children. */
+	UPROPERTY(EditAnywhere, Category = Hidden, meta = (NoBinding))
+	FInstancedPropertyBag Context;
 
-public:
-	virtual void Tick(float DeltaTime);
+	/** Data bindings definition. */
+	UPROPERTY()
+	FScriptablePropertyBindings PropertyBindings;
 
 	/**
-	 * Set up a tick function for a object in the standard way.
-	 * Don't tick if this is a "NeverTick" object.
-	 * @param	TickFunction - structure holding the specific tick function
-	 * @return  true if this object met the criteria for actually being ticked.
+	 * Lookup Map for Runtime Bindings.
+	 * Only populated on the Root object. Transient.
 	 */
-	bool SetupTickFunction(struct FTickFunction* TickFunction);
+	UPROPERTY(Transient)
+	TMap<FGuid, TObjectPtr<UScriptableObject>> BindingSourceMap;
 
-protected:
-	/**
-	 * Virtual call chain to register all tick functions
-	 * @param bRegister - true to register, false, to unregister
-	 */
-	virtual void RegisterTickFunctions(bool bRegister);
+	/** Cached pointers */
+	UObject* OwnerPrivate = nullptr;
+	UWorld* WorldPrivate = nullptr;
+	FDelegateHandle OnWorldBeginTearDownHandle;
 
-	/** Event called every frame if tick is enabled */
-	UFUNCTION(BlueprintImplementableEvent, Category = Tick, meta = (DisplayName = "Tick"))
-	void ReceiveTick(float DeltaSeconds);
+	/** Internal helpers */
+	UWorld* GetWorld_Uncached() const;
+	void OnWorldBeginTearDown(UWorld* InWorld);
 };
 
 /** Helper function for executing task tick functions */

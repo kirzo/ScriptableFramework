@@ -65,51 +65,9 @@ void UScriptableObject::OnWorldBeginTearDown(UWorld* InWorld)
 	}
 }
 
-void UScriptableObject::RegisterBindingSource(const FGuid& InID, UScriptableObject* InSource)
-{
-	if (InID.IsValid() && InSource)
-	{
-		// If I am the Root, I store it. If I am a child, this function shouldn't be called directly on me
-		// generally, but strictly speaking GetRoot() returns 'this' if I am the root.
-		BindingSourceMap.Add(InID, InSource);
-	}
-}
-
-void UScriptableObject::UnregisterBindingSource(const FGuid& InID)
-{
-	if (InID.IsValid())
-	{
-		BindingSourceMap.Remove(InID);
-	}
-}
-
-UScriptableObject* UScriptableObject::FindBindingSource(const FGuid& InID)
-{
-	if (const TObjectPtr<UScriptableObject>* Found = BindingSourceMap.Find(InID))
-	{
-		return Found->Get();
-	}
-	return nullptr;
-}
-
-UScriptableObject* UScriptableObject::GetRoot() const
-{
-	UObject* Top = const_cast<UObject*>(Cast<UObject>(this));
-	for (;;)
-	{
-		UObject* CurrentOuter = Top->GetOuter();
-		if (!IsValid(CurrentOuter) || !CurrentOuter->IsA<UScriptableObject>())
-		{
-			return Cast<UScriptableObject>(Top);
-		}
-		Top = CurrentOuter;
-	}
-}
-
-void UScriptableObject::ResolveBindings()
-{
-	PropertyBindings.ResolveBindings(this);
-}
+// -------------------------------------------------------------------
+//  Registration & Lifecycle
+// -------------------------------------------------------------------
 
 void UScriptableObject::Register(UObject* Owner)
 {
@@ -223,6 +181,28 @@ void UScriptableObject::RegisterObjectWithWorld(UWorld* InWorld)
 	bRegistered = true;
 }
 
+// -------------------------------------------------------------------
+//  Hierarchy & Ownership
+// -------------------------------------------------------------------
+
+UScriptableObject* UScriptableObject::GetRoot() const
+{
+	UObject* Top = const_cast<UObject*>(Cast<UObject>(this));
+	for (;;)
+	{
+		UObject* CurrentOuter = Top->GetOuter();
+		if (!IsValid(CurrentOuter) || !CurrentOuter->IsA<UScriptableObject>())
+		{
+			return Cast<UScriptableObject>(Top);
+		}
+		Top = CurrentOuter;
+	}
+}
+
+// -------------------------------------------------------------------
+//  Ticking System
+// -------------------------------------------------------------------
+
 void UScriptableObject::Tick(float DeltaTime)
 {
 	ReceiveTick(DeltaTime);
@@ -286,6 +266,42 @@ FName FScriptableObjectTickFunction::DiagnosticContext(bool bDetailed)
 	{
 		return Target->GetClass()->GetFName();
 	}
+}
+
+// -------------------------------------------------------------------
+//  Data Binding & Context
+// -------------------------------------------------------------------
+
+void UScriptableObject::ResolveBindings()
+{
+	PropertyBindings.ResolveBindings(this);
+}
+
+void UScriptableObject::RegisterBindingSource(const FGuid& InID, UScriptableObject* InSource)
+{
+	if (InID.IsValid() && InSource)
+	{
+		// If I am the Root, I store it. If I am a child, this function shouldn't be called directly on me
+		// generally, but strictly speaking GetRoot() returns 'this' if I am the root.
+		BindingSourceMap.Add(InID, InSource);
+	}
+}
+
+void UScriptableObject::UnregisterBindingSource(const FGuid& InID)
+{
+	if (InID.IsValid())
+	{
+		BindingSourceMap.Remove(InID);
+	}
+}
+
+UScriptableObject* UScriptableObject::FindBindingSource(const FGuid& InID)
+{
+	if (const TObjectPtr<UScriptableObject>* Found = BindingSourceMap.Find(InID))
+	{
+		return Found->Get();
+	}
+	return nullptr;
 }
 
 UE_ENABLE_OPTIMIZATION
