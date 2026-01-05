@@ -130,13 +130,13 @@ namespace ScriptableFrameworkEditor
 		// ----------------------------------------------------------------
 
 		// Access the Context PropertyBag directly. 
-		const FInstancedPropertyBag& Bag = const_cast<UScriptableObject*>(RootObject)->GetContext();
+		const FInstancedPropertyBag& Bag = RootObject->GetContext();
 		if (Bag.IsValid())
 		{
 			FBindableStructDesc& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
 			ContextDesc.Name = FName(TEXT("Context"));
 			ContextDesc.Struct = Bag.GetPropertyBagStruct();
-			ContextDesc.ID = FGuid();//FGuid::NewDeterministicGuid(RootObject->GetPathName(), FCrc::StrCrc32<TCHAR>(TEXT("Context")));
+			ContextDesc.ID = FGuid();
 		}
 
 		// ----------------------------------------------------------------
@@ -192,9 +192,7 @@ namespace ScriptableFrameworkEditor
 				FBindableStructDesc& Desc = OutStructDescs.AddDefaulted_GetRef();
 				Desc.Name = FName(*Obj->GetName());
 				Desc.Struct = Obj->GetClass();
-
-				// Generate deterministic ID
-				FGuid::Parse(FMD5::HashAnsiString(*Obj->GetPathName()), Desc.ID);
+				Desc.ID = Obj->GetBindingID();
 			}
 		}
 	}

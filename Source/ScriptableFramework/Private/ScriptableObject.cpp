@@ -13,6 +13,30 @@ UScriptableObject::UScriptableObject()
 	PrimaryObjectTick.bCanEverTick = true;
 }
 
+void UScriptableObject::PostInitProperties()
+{
+	Super::PostInitProperties();
+
+	// If this is a new object and doesn't have an ID, generate one.
+	// Note: When Instancing (DuplicateObject), the ID is copied from the template,
+	// so this check will be skipped, preserving the original ID.
+	if (!BindingID.IsValid())
+	{
+		BindingID = FGuid::NewGuid();
+	}
+}
+
+void UScriptableObject::PostLoad()
+{
+	Super::PostLoad();
+
+	// Ensure legacy objects loaded from disk get an ID assigned.
+	if (!BindingID.IsValid())
+	{
+		BindingID = FGuid::NewGuid();
+	}
+}
+
 UWorld* UScriptableObject::GetWorld_Uncached() const
 {
 	UWorld* MyWorld = nullptr;
@@ -41,6 +65,33 @@ void UScriptableObject::OnWorldBeginTearDown(UWorld* InWorld)
 	}
 }
 
+void UScriptableObject::RegisterBindingSource(const FGuid& InID, UScriptableObject* InSource)
+{
+	if (InID.IsValid() && InSource)
+	{
+		// If I am the Root, I store it. If I am a child, this function shouldn't be called directly on me
+		// generally, but strictly speaking GetRoot() returns 'this' if I am the root.
+		BindingSourceMap.Add(InID, InSource);
+	}
+}
+
+void UScriptableObject::UnregisterBindingSource(const FGuid& InID)
+{
+	if (InID.IsValid())
+	{
+		BindingSourceMap.Remove(InID);
+	}
+}
+
+UScriptableObject* UScriptableObject::FindBindingSource(const FGuid& InID)
+{
+	if (const TObjectPtr<UScriptableObject>* Found = BindingSourceMap.Find(InID))
+	{
+		return Found->Get();
+	}
+	return nullptr;
+}
+
 UScriptableObject* UScriptableObject::GetRoot() const
 {
 	UObject* Top = const_cast<UObject*>(Cast<UObject>(this));
@@ -57,15 +108,7 @@ UScriptableObject* UScriptableObject::GetRoot() const
 
 void UScriptableObject::ResolveBindings()
 {
-	UScriptableObject* Root = GetRoot();
-	if (!Root) return;
-
-	if (!Root->Context.IsValid()) return;
-
-	FPropertyBindingDataView SourceView(Root->Context.GetValue().GetScriptStruct(), Root->Context.GetMutableValue().GetMemory());
-	FPropertyBindingDataView TargetView(this);
-
-	PropertyBindings.PerformCopies(SourceView, TargetView);
+	PropertyBindings.ResolveBindings(this);
 }
 
 void UScriptableObject::Register(UObject* Owner)
@@ -78,6 +121,15 @@ void UScriptableObject::Register(UObject* Owner)
 
 		if (IsRegistered())
 		{
+			// Before calling OnRegister, we ensure this object is discoverable by the Root.
+			if (BindingID.IsValid())
+			{
+				if (UScriptableObject* Root = GetRoot())
+				{
+					Root->RegisterBindingSource(BindingID, this);
+				}
+			}
+
 			OnRegister();
 		}
 	}
@@ -92,6 +144,14 @@ void UScriptableObject::Unregister()
 	{
 		UE_LOG(LogScriptableObject, Log, TEXT("Unregister: (%s) not registered. Aborting."), *GetPathName());
 		return;
+	}
+
+	if (BindingID.IsValid())
+	{
+		if (UScriptableObject* Root = GetRoot())
+		{
+			Root->UnregisterBindingSource(BindingID);
+		}
 	}
 
 	FWorldDelegates::OnWorldBeginTearDown.Remove(OnWorldBeginTearDownHandle);

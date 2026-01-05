@@ -42,9 +42,24 @@ protected:
 	FInstancedPropertyBag Context;
 
 private:
+	/**
+	 * Unique identifier for this object instance.
+	 * Used to resolve property bindings at runtime.
+	 */
+	UPROPERTY()
+	FGuid BindingID;
+
 	/** Data bindings definition (which property copies from where). */
 	UPROPERTY()
 	FScriptablePropertyBindings PropertyBindings;
+
+	/**
+	 * Map for O(1) runtime lookup of tasks by their persistent ID.
+	 * Only populated on the Root object of the hierarchy.
+	 * Transient because it is rebuilt dynamically via Register().
+	 */
+	UPROPERTY(Transient)
+	TMap<FGuid, TObjectPtr<UScriptableObject>> BindingSourceMap;
 
 	/** Cached pointer to owning object */
 	UObject* OwnerPrivate;
@@ -64,6 +79,9 @@ private:
 public:
 	UScriptableObject();
 
+	virtual void PostInitProperties() override;
+	virtual void PostLoad() override;
+
 	FORCEINLINE bool IsEnabled() const { return bEnabled; }
 
 	/** See if this component is currently registered */
@@ -72,12 +90,25 @@ public:
 	FORCEINLINE virtual bool CanEverTick() const { return bCanEverTick; }
 	FORCEINLINE virtual bool IsReadyToTick() const { return true; }
 
+	/** Returns the persistent binding ID. */
+	FGuid GetBindingID() const { return BindingID; }
+
+	/** Registers a object into the binding map. */
+	void RegisterBindingSource(const FGuid& InID, UScriptableObject* InSource);
+
+	/** Unregisters a task from the binding map. */
+	void UnregisterBindingSource(const FGuid& InID);
+
+	/** Finds a registered task by its persistent ID. */
+	UScriptableObject* FindBindingSource(const FGuid& InID);
+
 	/** Finds the root object of the hierarchy. */
 	UFUNCTION(BlueprintCallable, Category = ScriptableObject)
 	UScriptableObject* GetRoot() const;
 
 	/** Returns the mutable reference to the Context property bag. */
 	FInstancedPropertyBag& GetContext() { return Context; }
+	const FInstancedPropertyBag& GetContext() const { return Context; }
 
 	/**
 	 * Checks if the Context has a specific property.

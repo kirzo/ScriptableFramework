@@ -1,50 +1,9 @@
 ﻿// Copyright 2025 kirzo
 
 #include "Bindings/ScriptablePropertyBindings.h"
+#include "ScriptableObject.h"
 
 UE_DISABLE_OPTIMIZATION
-
-void FScriptablePropertyBindings::PerformCopies(const FPropertyBindingDataView& SrcObjectView, const FPropertyBindingDataView& DestObjectView)
-{
-	for (const FScriptablePropertyBinding& Binding : Bindings)
-	{
-		TArray<FPropertyBindingPathIndirection> SourceIndirections;
-		if (!Binding.SourcePath.ResolveIndirectionsWithValue(SrcObjectView, SourceIndirections)) continue;
-
-		TArray<FPropertyBindingPathIndirection> TargetIndirections;
-		if (!Binding.TargetPath.ResolveIndirectionsWithValue(DestObjectView, TargetIndirections)) continue;
-
-		const FPropertyBindingPathIndirection& SourceLeaf = SourceIndirections.Last();
-		const FPropertyBindingPathIndirection& TargetLeaf = TargetIndirections.Last();
-
-		const FProperty* SourceProp = SourceLeaf.GetProperty();
-		const FProperty* TargetProp = TargetLeaf.GetProperty();
-		const void* SourceAddr = SourceLeaf.GetPropertyAddress();
-		void* TargetAddr = TargetLeaf.GetMutablePropertyAddress();
-
-		if (SourceProp && TargetProp && SourceAddr && TargetAddr)
-		{
-			if (SourceProp->SameType(TargetProp))
-			{
-				SourceProp->CopyCompleteValue(TargetAddr, SourceAddr);
-			}
-			else
-			{
-				// Float <-> Double
-				if (SourceProp->IsA<FFloatProperty>() && TargetProp->IsA<FDoubleProperty>())
-				{
-					const float SrcVal = CastField<FFloatProperty>(SourceProp)->GetFloatingPointPropertyValue(SourceAddr);
-					CastField<FDoubleProperty>(TargetProp)->SetFloatingPointPropertyValue(TargetAddr, (double)SrcVal);
-				}
-				else if (SourceProp->IsA<FDoubleProperty>() && TargetProp->IsA<FFloatProperty>())
-				{
-					const double SrcVal = CastField<FDoubleProperty>(SourceProp)->GetFloatingPointPropertyValue(SourceAddr);
-					CastField<FFloatProperty>(TargetProp)->SetFloatingPointPropertyValue(TargetAddr, (float)SrcVal);
-				}
-			}
-		}
-	}
-}
 
 void FScriptablePropertyBindings::AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath)
 {
@@ -88,6 +47,100 @@ const FPropertyBindingPath* FScriptablePropertyBindings::GetPropertyBinding(cons
 	});
 
 	return FoundBinding ? &FoundBinding->SourcePath : nullptr;
+}
+
+void FScriptablePropertyBindings::CopySingleBinding(const FScriptablePropertyBinding& Binding, const FPropertyBindingDataView& SrcView, const FPropertyBindingDataView& DestView)
+{
+	TArray<FPropertyBindingPathIndirection> SourceIndirections;
+	if (!Binding.SourcePath.ResolveIndirectionsWithValue(SrcView, SourceIndirections)) return;
+
+	TArray<FPropertyBindingPathIndirection> TargetIndirections;
+	if (!Binding.TargetPath.ResolveIndirectionsWithValue(DestView, TargetIndirections)) return;
+
+	const FPropertyBindingPathIndirection& SourceLeaf = SourceIndirections.Last();
+	const FPropertyBindingPathIndirection& TargetLeaf = TargetIndirections.Last();
+
+	const FProperty* SourceProp = SourceLeaf.GetProperty();
+	const FProperty* TargetProp = TargetLeaf.GetProperty();
+	const void* SourceAddr = SourceLeaf.GetPropertyAddress();
+	void* TargetAddr = TargetLeaf.GetMutablePropertyAddress();
+
+	if (SourceProp && TargetProp && SourceAddr && TargetAddr)
+	{
+		if (SourceProp->SameType(TargetProp))
+		{
+			SourceProp->CopyCompleteValue(TargetAddr, SourceAddr);
+		}
+		else
+		{
+			// Float <-> Double Conversion
+			if (SourceProp->IsA<FFloatProperty>() && TargetProp->IsA<FDoubleProperty>())
+			{
+				const float SrcVal = CastField<FFloatProperty>(SourceProp)->GetFloatingPointPropertyValue(SourceAddr);
+				CastField<FDoubleProperty>(TargetProp)->SetFloatingPointPropertyValue(TargetAddr, (double)SrcVal);
+			}
+			else if (SourceProp->IsA<FDoubleProperty>() && TargetProp->IsA<FFloatProperty>())
+			{
+				const double SrcVal = CastField<FDoubleProperty>(SourceProp)->GetFloatingPointPropertyValue(SourceAddr);
+				CastField<FFloatProperty>(TargetProp)->SetFloatingPointPropertyValue(TargetAddr, (float)SrcVal);
+			}
+		}
+	}
+}
+
+void FScriptablePropertyBindings::ResolveBindings(UScriptableObject* TargetObject)
+{
+	if (!TargetObject) return;
+
+	UScriptableObject* Root = TargetObject->GetRoot();
+	if (!Root) return;
+
+	// Prepare the Context View in advance (it might be used by multiple bindings)
+	FPropertyBindingDataView ContextView;
+	if (Root->GetContext().IsValid())
+	{
+		ContextView = FPropertyBindingDataView(Root->GetContext().GetValue().GetScriptStruct(), Root->GetContext().GetMutableValue().GetMemory());
+	}
+
+	// The Target View is always the object requesting the resolution
+	FPropertyBindingDataView TargetView(TargetObject);
+
+	for (const FScriptablePropertyBinding& Binding : Bindings)
+	{
+		// Determine the Source Data View (Who are we copying FROM?)
+		FPropertyBindingDataView SourceView;
+		if (Binding.SourcePath.GetStructID().IsValid())
+		{
+			// CASE A: Sibling Binding
+			// We look for the persistent ID in the runtime hierarchy
+			UScriptableObject* SourceObj = Root->FindBindingSource(Binding.SourcePath.GetStructID());
+
+			if (SourceObj)
+			{
+				SourceView = FPropertyBindingDataView(SourceObj);
+			}
+			else
+			{
+				// Source object not found (e.g., was deleted or not loaded yet). Skip binding.
+				continue;
+			}
+		}
+		else
+		{
+			// CASE B: Context Binding
+			if (ContextView.IsValid())
+			{
+				SourceView = ContextView;
+			}
+			else
+			{
+				continue;
+			}
+		}
+
+		// Perform the Copy
+		CopySingleBinding(Binding, SourceView, TargetView);
+	}
 }
 
 bool FScriptablePropertyBindings::ArePropertiesCompatible(const FProperty* SourceProp, const FProperty* TargetProp)

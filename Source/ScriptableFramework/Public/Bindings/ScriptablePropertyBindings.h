@@ -32,11 +32,6 @@ struct SCRIPTABLEFRAMEWORK_API FScriptablePropertyBindings
 	UPROPERTY(EditDefaultsOnly, Category = Bindings)
 	TArray<FScriptablePropertyBinding> Bindings;
 
-	/**
-	 * Copies data from the source view to the destination view using the defined paths.
-	 */
-	void PerformCopies(const FPropertyBindingDataView& SrcObjectView, const FPropertyBindingDataView& DestObjectView);
-
 	// Editor Helpers
 	void AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath);
 	void RemovePropertyBindings(const FPropertyBindingPath& TargetPath);
@@ -48,6 +43,14 @@ struct SCRIPTABLEFRAMEWORK_API FScriptablePropertyBindings
 	 * @return Pointer to the source path if found, nullptr otherwise.
 	 */
 	const FPropertyBindingPath* GetPropertyBinding(const FPropertyBindingPath& TargetPath) const;
+
+	void CopySingleBinding(const FScriptablePropertyBinding& Binding, const FPropertyBindingDataView& SrcView, const FPropertyBindingDataView& DestView);
+
+	/**
+	 * Resolves all bindings and copies values to the TargetObject.
+	 * Handles both Context bindings and Task-to-Task bindings.
+	 */
+	void ResolveBindings(class UScriptableObject* TargetObject);
 
 	// Type Compatibility (Delegates to Unreal's property system)
 	static bool ArePropertiesCompatible(const FProperty* SourceProp, const FProperty* TargetProp);
