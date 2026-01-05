@@ -484,7 +484,7 @@ void SScriptableTypePicker::CacheTypes(const UScriptStruct* BaseScriptStruct, co
 
 			if (!IconName.IsNone())
 			{
-				NewItem->Icon = FSlateIcon(FScriptableFrameworkEditorStyle::GetStyleSetName(), IconName);
+				NewItem->Icon = FSlateIcon(FScriptableFrameworkEditorStyle::Get().GetStyleSetName(), IconName);
 				NewItem->IconColor = FLinearColor::White;
 			}
 			else

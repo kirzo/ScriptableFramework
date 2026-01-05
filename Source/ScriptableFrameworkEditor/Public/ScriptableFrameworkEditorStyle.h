@@ -1,23 +1,20 @@
-// Copyright 2025 kirzo
+// Copyright 2026 kirzo
 
 #pragma once
 
 #include "Styling/SlateStyle.h"
 
-class FScriptableFrameworkEditorStyle
+class SCRIPTABLEFRAMEWORKEDITOR_API FScriptableFrameworkEditorStyle : public FSlateStyleSet
 {
 public:
-	static TSharedPtr<ISlateStyle> Get() { return StyleSet; }
-	static FName GetStyleSetName();
+	static FScriptableFrameworkEditorStyle& Get();
 
-	static void Initialize();
-	static void Shutdown();
+protected:
+	friend class FScriptableFrameworkEditorModule;
 
-	static const FSlateBrush* GetBrush(FName PropertyName, const ANSICHAR* Specifier = nullptr)
-	{
-		return Get()->GetBrush(PropertyName, Specifier);
-	}
+	static void Register();
+	static void Unregister();
 
 private:
-	static TSharedPtr<FSlateStyleSet> StyleSet;
+	FScriptableFrameworkEditorStyle();
 };
