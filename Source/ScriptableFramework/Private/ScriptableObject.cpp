@@ -5,8 +5,6 @@
 
 DEFINE_LOG_CATEGORY(LogScriptableObject);
 
-UE_DISABLE_OPTIMIZATION
-
 UScriptableObject::UScriptableObject()
 {
 	bCanEverTick = false;
@@ -338,5 +336,3 @@ UScriptableObject* UScriptableObject::FindBindingSource(const FGuid& InID)
 	}
 	return nullptr;
 }
-
-UE_ENABLE_OPTIMIZATION

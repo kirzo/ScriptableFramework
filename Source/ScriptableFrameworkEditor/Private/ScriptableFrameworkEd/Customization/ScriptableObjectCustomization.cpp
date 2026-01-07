@@ -27,8 +27,6 @@
 
 #define LOCTEXT_NAMESPACE "FScriptableObjectCustomization"
 
-UE_DISABLE_OPTIMIZATION
-
 // ------------------------------------------------------------------------------------------------
 // Helper Namespace for UI & Widgets (Local Implementation)
 // ------------------------------------------------------------------------------------------------
@@ -946,7 +944,5 @@ void FScriptableObjectCustomization::OnClear()
 	static const FString None("None");
 	PropertyHandle->SetValueFromFormattedString(None);
 }
-
-UE_ENABLE_OPTIMIZATION
 
 #undef LOCTEXT_NAMESPACE

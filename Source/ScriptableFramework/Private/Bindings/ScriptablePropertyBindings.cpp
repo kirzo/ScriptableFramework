@@ -3,8 +3,6 @@
 #include "Bindings/ScriptablePropertyBindings.h"
 #include "ScriptableObject.h"
 
-UE_DISABLE_OPTIMIZATION
-
 #if WITH_EDITOR
 void FScriptablePropertyBindings::AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath)
 {
@@ -195,5 +193,3 @@ void FScriptablePropertyBindings::CopySingleBinding(const FScriptablePropertyBin
 		}
 	}
 }
-
-UE_ENABLE_OPTIMIZATION
