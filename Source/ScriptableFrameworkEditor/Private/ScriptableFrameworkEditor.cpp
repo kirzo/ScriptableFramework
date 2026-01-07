@@ -27,13 +27,13 @@ void FScriptableFrameworkEditorModule::StartupModule()
 	ScriptableAssetCategoryBit = AssetTools.RegisterAdvancedAssetCategory("ScriptableFramework", INVTEXT("Scriptable Framework"));
 
 	RegisterAssetTools();
-	RegisterPropertyLayouts();
+	RegisterLayouts();
 }
 
 void FScriptableFrameworkEditorModule::ShutdownModule()
 {
 	UnregisterAssetTools();
-	UnregisterPropertyLayouts();
+	UnregisterLayouts();
 
 	FScriptableFrameworkEditorStyle::Unregister();
 }
@@ -70,11 +70,18 @@ void FScriptableFrameworkEditorModule::RegisterAssetTypeAction(const FText& Name
 	RegisteredAssetTypeActions.Add(Action);
 }
 
-template<typename TPropertyType>
+template<typename T>
+void FScriptableFrameworkEditorModule::RegisterClassLayout(FPropertyEditorModule& PropertyEditorModule, const FName ClassName)
+{
+	RegisteredClassLayouts.AddUnique(ClassName);
+	PropertyEditorModule.RegisterCustomClassLayout(ClassName, FOnGetDetailCustomizationInstance::CreateStatic(&T::MakeInstance));
+}
+
+template<typename T>
 void FScriptableFrameworkEditorModule::RegisterPropertyLayout(FPropertyEditorModule& PropertyEditorModule, const FName TypeName)
 {
 	RegisteredPropertyLayouts.AddUnique(TypeName);
-	PropertyEditorModule.RegisterCustomPropertyTypeLayout(TypeName, FOnGetPropertyTypeCustomizationInstance::CreateStatic(&TPropertyType::MakeInstance));
+	PropertyEditorModule.RegisterCustomPropertyTypeLayout(TypeName, FOnGetPropertyTypeCustomizationInstance::CreateStatic(&T::MakeInstance));
 }
 
 void FScriptableFrameworkEditorModule::RegisterAssetTools()
@@ -95,18 +102,23 @@ void FScriptableFrameworkEditorModule::UnregisterAssetTools()
 	}
 }
 
-void FScriptableFrameworkEditorModule::RegisterPropertyLayouts()
+void FScriptableFrameworkEditorModule::RegisterLayouts()
 {
 	FPropertyEditorModule& PropertyEditorModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
 	RegisterPropertyLayout<FScriptableObjectCustomization>(PropertyEditorModule, UScriptableTask::StaticClass()->GetFName());
 	RegisterPropertyLayout<FScriptableConditionCustomization>(PropertyEditorModule, UScriptableCondition::StaticClass()->GetFName());
 }
 
-void FScriptableFrameworkEditorModule::UnregisterPropertyLayouts()
+void FScriptableFrameworkEditorModule::UnregisterLayouts()
 {
 	if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))
 	{
 		FPropertyEditorModule& PropertyEditorModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
+		for (const FName ClassName : RegisteredClassLayouts)
+		{
+			PropertyEditorModule.UnregisterCustomClassLayout(ClassName);
+		}
+
 		for (const FName TypeName : RegisteredPropertyLayouts)
 		{
 			PropertyEditorModule.UnregisterCustomPropertyTypeLayout(TypeName);

@@ -15,6 +15,7 @@ private:
 	EAssetTypeCategories::Type ScriptableAssetCategoryBit = EAssetTypeCategories::None;
 
 	TArray<TSharedRef<class IAssetTypeActions>> RegisteredAssetTypeActions;
+	TArray<FName> RegisteredClassLayouts;
 	TArray<FName> RegisteredPropertyLayouts;
 
 public:
@@ -31,12 +32,15 @@ private:
 	template<typename T>
 	void RegisterAssetTypeAction(const FText& Name, FColor Color);
 
-	template<typename TPropertyType>
+	template<typename T>
+	void RegisterClassLayout(FPropertyEditorModule& PropertyEditorModule, const FName ClassName);
+
+	template<typename T>
 	void RegisterPropertyLayout(FPropertyEditorModule& PropertyEditorModule, const FName TypeName);
 
 	void RegisterAssetTools();
 	void UnregisterAssetTools();
 
-	void RegisterPropertyLayouts();
-	void UnregisterPropertyLayouts();
+	void RegisterLayouts();
+	void UnregisterLayouts();
 };
