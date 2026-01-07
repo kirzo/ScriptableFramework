@@ -118,7 +118,7 @@ namespace ScriptableBindingUI
 			else // Unbound
 			{
 				Text = FText::GetEmpty();
-				TooltipText = LOCTEXT("BindActionTooltip", "Bind this property to a value from the Context.");
+				TooltipText = LOCTEXT("BindActionTooltip", "Bind this property to a value from the Context or a sibling node.");
 				Image = FAppStyle::GetBrush(PropertyIcon);
 				Color = Schema->GetPinTypeColor(PinType);
 			}
