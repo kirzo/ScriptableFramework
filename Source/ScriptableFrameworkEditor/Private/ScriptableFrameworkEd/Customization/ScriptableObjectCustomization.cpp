@@ -30,126 +30,25 @@
 UE_DISABLE_OPTIMIZATION
 
 // ------------------------------------------------------------------------------------------------
-// Helper Namespace for Binding Logic
+// Helper Namespace for UI & Widgets (Local Implementation)
 // ------------------------------------------------------------------------------------------------
-namespace ScriptableBindingHelpers
+namespace ScriptableBindingUI
 {
-	/** Helper to find the owning ScriptableObject. */
-	UScriptableObject* GetOuterScriptableObject(const TSharedPtr<const IPropertyHandle>& InPropertyHandle)
+	/** @return text describing the pin type, matches SPinTypeSelector. */
+	FText GetPinTypeText(const FEdGraphPinType& PinType)
 	{
-		TArray<UObject*> OuterObjects;
-		InPropertyHandle->GetOuterObjects(OuterObjects);
-		for (UObject* OuterObject : OuterObjects)
+		const FName PinSubCategory = PinType.PinSubCategory;
+		const UObject* PinSubCategoryObject = PinType.PinSubCategoryObject.Get();
+		if (PinSubCategory != UEdGraphSchema_K2::PSC_Bitmask && PinSubCategoryObject)
 		{
-			if (OuterObject)
+			if (const UField* Field = Cast<const UField>(PinSubCategoryObject))
 			{
-				if (UScriptableObject* ScriptableObject = Cast<UScriptableObject>(OuterObject))
-				{
-					return ScriptableObject;
-				}
-				if (UScriptableObject* OuterScriptableObject = OuterObject->GetTypedOuter<UScriptableObject>())
-				{
-					return OuterScriptableObject;
-				}
+				return Field->GetDisplayNameText();
 			}
-		}
-		return nullptr;
-	}
-
-	/** Generates a deterministic ID based on the owning object path using MD5. */
-	FGuid GetScriptableObjectDataID(UScriptableObject* Owner)
-	{
-		return Owner ? Owner->GetBindingID() : FGuid();
-	}
-
-	/** Generates a property path for the property being edited. */
-	void MakeStructPropertyPathFromPropertyHandle(UScriptableObject* ScriptableObject, TSharedPtr<const IPropertyHandle> InPropertyHandle, FPropertyBindingPath& OutPath)
-	{
-		OutPath.Reset();
-
-		if (!ScriptableObject) return;
-
-		TArray<FPropertyBindingPathSegment> PathSegments;
-		TSharedPtr<const IPropertyHandle> CurrentPropertyHandle = InPropertyHandle;
-
-		while (CurrentPropertyHandle.IsValid())
-		{
-			const FProperty* Property = CurrentPropertyHandle->GetProperty();
-			if (Property)
-			{
-				// Stop if we reach the class boundary (e.g. owning Actor properties)
-				if (const UClass* PropertyOwnerClass = Cast<UClass>(Property->GetOwnerStruct()))
-				{
-					if (!ScriptableObject->GetClass()->IsChildOf(PropertyOwnerClass))
-					{
-						break;
-					}
-				}
-
-				FPropertyBindingPathSegment& Segment = PathSegments.InsertDefaulted_GetRef(0);
-				Segment.SetName(Property->GetFName());
-				Segment.SetArrayIndex(CurrentPropertyHandle->GetIndexInArray());
-
-				if (const FObjectProperty* ObjectProperty = CastField<FObjectProperty>(Property))
-				{
-					if (ObjectProperty->HasAnyPropertyFlags(CPF_PersistentInstance | CPF_InstancedReference))
-					{
-						const UObject* Object = nullptr;
-						if (CurrentPropertyHandle->GetValue(Object) == FPropertyAccess::Success && Object)
-						{
-							Segment.SetInstanceStruct(Object->GetClass());
-						}
-					}
-				}
-				else if (const FStructProperty* StructProperty = CastField<FStructProperty>(Property))
-				{
-					if (StructProperty->Struct == TBaseStructure<FInstancedStruct>::Get())
-					{
-						void* Address = nullptr;
-						if (CurrentPropertyHandle->GetValueData(Address) == FPropertyAccess::Success && Address)
-						{
-							const FInstancedStruct& Struct = *static_cast<const FInstancedStruct*>(Address);
-							Segment.SetInstanceStruct(Struct.GetScriptStruct());
-						}
-					}
-				}
-
-				if (Segment.GetArrayIndex() != INDEX_NONE)
-				{
-					TSharedPtr<const IPropertyHandle> ParentPropertyHandle = CurrentPropertyHandle->GetParentHandle();
-					if (ParentPropertyHandle.IsValid())
-					{
-						const FProperty* ParentProperty = ParentPropertyHandle->GetProperty();
-						if (ParentProperty && ParentProperty->IsA<FArrayProperty>() && Property->GetFName() == ParentProperty->GetFName())
-						{
-							CurrentPropertyHandle = ParentPropertyHandle;
-						}
-					}
-				}
-			}
-			CurrentPropertyHandle = CurrentPropertyHandle->GetParentHandle();
+			return FText::FromString(PinSubCategoryObject->GetName());
 		}
 
-		if (PathSegments.Num() > 0)
-		{
-			FGuid OwnerID = GetScriptableObjectDataID(ScriptableObject);
-			OutPath = FPropertyBindingPath(OwnerID, PathSegments);
-		}
-	}
-
-	/** Resolves the Source Path from the Binding Chain. */
-	void MakeStructPropertyPathFromBindingChain(const FGuid& StructID, const TArray<FBindingChainElement>& InBindingChain, FPropertyBindingPath& OutPath)
-	{
-		OutPath.Reset();
-		OutPath.SetStructID(StructID);
-
-		for (const FBindingChainElement& Element : InBindingChain)
-		{
-			if (const FProperty* Property = Element.Field.Get<FProperty>())
-			{
-				OutPath.AddPathSegment(Property->GetFName(), Element.ArrayIndex);
-			}
-		}
+		return UEdGraphSchema_K2::GetCategoryText(PinType.PinCategory, NAME_None, true);
 	}
 
 	/** Caches binding data to avoid recalculating text/color every frame. */
@@ -246,7 +145,7 @@ namespace ScriptableBindingHelpers
 			PropertyChain.RemoveAt(0);
 
 			FPropertyBindingPath SourcePath;
-			MakeStructPropertyPathFromBindingChain(SelectedContext.ID, PropertyChain, SourcePath);
+			ScriptableFrameworkEditor::MakeStructPropertyPathFromBindingChain(SelectedContext.ID, PropertyChain, SourcePath);
 
 			ScriptableObject->GetPropertyBindings().AddPropertyBinding(SourcePath, TargetPath);
 			UpdateData();
@@ -351,23 +250,6 @@ namespace ScriptableBindingHelpers
 		return PropertyAccessEditor.MakePropertyBindingWidget(Contexts, Args);
 	}
 
-	/** @return text describing the pin type, matches SPinTypeSelector. */
-	FText GetPinTypeText(const FEdGraphPinType& PinType)
-	{
-		const FName PinSubCategory = PinType.PinSubCategory;
-		const UObject* PinSubCategoryObject = PinType.PinSubCategoryObject.Get();
-		if (PinSubCategory != UEdGraphSchema_K2::PSC_Bitmask && PinSubCategoryObject)
-		{
-			if (const UField* Field = Cast<const UField>(PinSubCategoryObject))
-			{
-				return Field->GetDisplayNameText();
-			}
-			return FText::FromString(PinSubCategoryObject->GetName());
-		}
-
-		return UEdGraphSchema_K2::GetCategoryText(PinType.PinCategory, NAME_None, true);
-	}
-
 	void ModifyRow(UScriptableObject* ScriptableObject, IDetailPropertyRow& Row, TSharedPtr<FCachedBindingData> CachedData)
 	{
 		const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
@@ -383,7 +265,7 @@ namespace ScriptableBindingHelpers
 		{
 			if (!ScriptableObject) return EVisibility::Visible;
 			FPropertyBindingPath TP;
-			ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, PropertyHandle, TP);
+			ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, PropertyHandle, TP);
 			return ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP) ? EVisibility::Collapsed : EVisibility::Visible;
 		});
 
@@ -439,7 +321,7 @@ namespace ScriptableBindingHelpers
 				];
 		}
 
-		TSharedPtr<SWidget> BindingWidget = bIsOutputProperty ? SNullWidget::NullWidget : ScriptableBindingHelpers::CreateBindingWidget(PropertyHandle, CachedData);
+		TSharedPtr<SWidget> BindingWidget = bIsOutputProperty ? SNullWidget::NullWidget : ScriptableBindingUI::CreateBindingWidget(PropertyHandle, CachedData);
 
 		Row
 			.CustomWidget(true)
@@ -495,7 +377,7 @@ namespace ScriptableBindingHelpers
 					]
 			];
 	}
-} // End Namespace
+}
 
 // ------------------------------------------------------------------------------------------------
 // FScriptableObjectCustomization Implementation
@@ -517,17 +399,7 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 	TSharedPtr<IPropertyHandle> ChildPropertyHandle = PropertyHandle->GetChildHandle(0);
 	if (ChildPropertyHandle)
 	{
-		// Get the actual ScriptableObject
-		TArray<void*> RawData;
-		ChildPropertyHandle->AccessRawData(RawData);
-		ScriptableObject = static_cast<UScriptableObject*>(RawData[0]);
-
-		// Get the actual ScriptableObject safely
-		UObject* ObjectValue = nullptr;
-		if (ChildPropertyHandle->GetValue(ObjectValue) == FPropertyAccess::Success)
-		{
-			ScriptableObject = Cast<UScriptableObject>(ObjectValue);
-		}
+		ScriptableObject = ScriptableFrameworkEditor::GetOuterScriptableObject(ChildPropertyHandle);
 
 		bIsBlueprintClass = IsValid(ScriptableObject) && ScriptableObject->GetClass()->HasAnyClassFlags(CLASS_CompiledFromBlueprint);
 
@@ -662,10 +534,10 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 					{
 						// Create CachedData locally to capture it in the Reset Handler
 						FPropertyBindingPath TargetPath;
-						ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TargetPath);
+						ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TargetPath);
 
-						TSharedPtr<ScriptableBindingHelpers::FCachedBindingData> CachedData =
-							MakeShared<ScriptableBindingHelpers::FCachedBindingData>(ScriptableObject, TargetPath, SubPropertyHandle, AccessibleStructs);
+						TSharedPtr<ScriptableBindingUI::FCachedBindingData> CachedData =
+							MakeShared<ScriptableBindingUI::FCachedBindingData>(ScriptableObject, TargetPath, SubPropertyHandle, AccessibleStructs);
 
 						// --- RESET HANDLER ---
 						// This ensures the yellow reset arrow appears if bound, and handles unbinding upon click.
@@ -674,7 +546,7 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 							if (!ScriptableObject) return false;
 
 							FPropertyBindingPath TP;
-							ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TP);
+							ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TP);
 							if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP))
 							{
 								return true;
@@ -690,7 +562,7 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 							ScriptableObject->Modify();
 
 							FPropertyBindingPath TP;
-							ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TP);
+							ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TP);
 
 							if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP))
 							{
@@ -706,7 +578,7 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 						Row.OverrideResetToDefault(FResetToDefaultOverride::Create(IsResetVisible, ResetHandler));
 						// ---------------------
 
-						ScriptableBindingHelpers::ModifyRow(ScriptableObject, Row, CachedData);
+						ScriptableBindingUI::ModifyRow(ScriptableObject, Row, CachedData);
 					}
 				}
 			}
@@ -758,12 +630,12 @@ TSharedPtr<SWidget> FScriptableObjectCustomization::GenerateBindingWidget(UScrip
 	ScriptableFrameworkEditor::GetAccessibleStructs(InScriptableObject, AccessibleStructs);
 
 	FPropertyBindingPath TargetPath;
-	ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(InScriptableObject, InPropertyHandle, TargetPath);
+	ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(InScriptableObject, InPropertyHandle, TargetPath);
 
-	TSharedPtr<ScriptableBindingHelpers::FCachedBindingData> CachedData =
-		MakeShared<ScriptableBindingHelpers::FCachedBindingData>(InScriptableObject, TargetPath, InPropertyHandle, AccessibleStructs);
+	TSharedPtr<ScriptableBindingUI::FCachedBindingData> CachedData =
+		MakeShared<ScriptableBindingUI::FCachedBindingData>(InScriptableObject, TargetPath, InPropertyHandle, AccessibleStructs);
 
-	return ScriptableBindingHelpers::CreateBindingWidget(InPropertyHandle, CachedData);
+	return ScriptableBindingUI::CreateBindingWidget(InPropertyHandle, CachedData);
 }
 
 UClass* FScriptableObjectCustomization::GetBaseClass() const
