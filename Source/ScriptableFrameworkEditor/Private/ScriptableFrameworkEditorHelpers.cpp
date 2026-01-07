@@ -125,7 +125,7 @@ namespace ScriptableFrameworkEditor
 		return Owner ? Owner->GetBindingID() : FGuid();
 	}
 
-	void GetAccessibleStructs(const UScriptableObject* TargetObject, TArray<FBindableStructDesc>& OutStructDescs)
+	void ScriptableFrameworkEditor::GetAccessibleStructs(const UScriptableObject* TargetObject, TArray<FBindableStructDesc>& OutStructDescs)
 	{
 		if (!TargetObject) return;
 		const UScriptableObject* RootObject = TargetObject->GetRoot();
@@ -164,23 +164,10 @@ namespace ScriptableFrameworkEditor
 		// 3. Convert
 		for (const UScriptableObject* Obj : AccessibleObjects)
 		{
-			bool bHasOutputs = false;
-			for (TFieldIterator<FProperty> PropIt(Obj->GetClass()); PropIt; ++PropIt)
-			{
-				if (IsPropertyBindableOutput(*PropIt))
-				{
-					bHasOutputs = true;
-					break;
-				}
-			}
-
-			if (bHasOutputs)
-			{
-				FBindableStructDesc& Desc = OutStructDescs.AddDefaulted_GetRef();
-				Desc.Name = FName(*Obj->GetName());
-				Desc.Struct = Obj->GetClass();
-				Desc.ID = Obj->GetBindingID();
-			}
+			FBindableStructDesc& Desc = OutStructDescs.AddDefaulted_GetRef();
+			Desc.Name = FName(*Obj->GetName());
+			Desc.Struct = Obj->GetClass();
+			Desc.ID = Obj->GetBindingID();
 		}
 	}
 

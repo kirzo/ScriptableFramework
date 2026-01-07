@@ -246,6 +246,26 @@ namespace ScriptableBindingUI
 
 		Args.OnCanBindPropertyWithBindingChain = FOnCanBindPropertyWithBindingChain::CreateLambda([InPropertyHandle](FProperty* InProperty, TArrayView<const FBindingChainElement> BindingChain)
 		{
+			// 1. Check the property itself (Leaf)
+			if (InProperty->HasMetaData(TEXT("NoBinding")))
+			{
+				return false;
+			}
+
+			// 2. Check the hierarchy chain (Parents)
+			// If any parent property in the path is marked as NoBinding, we block this child too.
+			for (const FBindingChainElement& Element : BindingChain)
+			{
+				if (const FProperty* ChainProp = Element.Field.Get<FProperty>())
+				{
+					if (ChainProp->HasMetaData(TEXT("NoBinding")))
+					{
+						return false;
+					}
+				}
+			}
+
+			// 3. Check Type Compatibility
 			return FScriptablePropertyBindings::ArePropertiesCompatible(InProperty, InPropertyHandle->GetProperty());
 		});
 

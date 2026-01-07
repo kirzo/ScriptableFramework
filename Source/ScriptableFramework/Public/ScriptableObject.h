@@ -170,7 +170,7 @@ protected:
 
 private:
 	/** Unique identifier for bindings. Persists across duplication. */
-	UPROPERTY()
+	UPROPERTY(meta = (NoBinding))
 	FGuid BindingID;
 
 	/** Input data (Context) available for this object and its children. */
@@ -178,14 +178,14 @@ private:
 	FInstancedPropertyBag Context;
 
 	/** Data bindings definition. */
-	UPROPERTY()
+	UPROPERTY(meta = (NoBinding))
 	FScriptablePropertyBindings PropertyBindings;
 
 	/**
 	 * Lookup Map for Runtime Bindings.
 	 * Only populated on the Root object. Transient.
 	 */
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta = (NoBinding))
 	TMap<FGuid, TObjectPtr<UScriptableObject>> BindingSourceMap;
 
 	/** Cached pointers */
