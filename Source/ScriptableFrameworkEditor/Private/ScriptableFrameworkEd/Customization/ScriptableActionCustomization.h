@@ -4,8 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "IPropertyTypeCustomization.h"
+#include "Input/Reply.h"
+#include "Styling/SlateColor.h"
 
 class IPropertyUtilities;
+class SComboButton;
 
 class FScriptableActionCustomization : public IPropertyTypeCustomization
 {
@@ -18,9 +21,10 @@ public:
 private:
 	TSharedPtr<IPropertyHandle> ActionHandle;
 	TSharedPtr<IPropertyHandle> TasksHandle;
+	TSharedPtr<IPropertyHandle> ModeHandle;
 
 	// We keep this as SComboButton pointer to avoid forcing include of SScriptableTypePicker in header
-	TSharedPtr<class SComboButton> AddTaskComboButton;
+	TSharedPtr<SComboButton> AddTaskComboButton;
 
 	TSharedPtr<IPropertyUtilities> PropertyUtilities;
 
@@ -32,4 +36,15 @@ private:
 
 	/** Custom row generator to make tasks look like StateTree nodes (Clean header, Icon, Buttons). */
 	void OnGenerateElement(TSharedRef<IPropertyHandle> ElementHandle, int32 Index, IDetailChildrenBuilder& Builder);
+
+	// --- Mode Toggle Logic ---
+
+	/** Gets the text to display on the mode toggle button. */
+	FText GetModeText() const;
+
+	/** Gets the color of the mode toggle button based on the current mode. */
+	FSlateColor GetModeColor() const;
+
+	/** Handles the click event on the mode toggle button. */
+	FReply OnModeClicked();
 };

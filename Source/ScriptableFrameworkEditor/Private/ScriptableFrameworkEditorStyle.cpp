@@ -55,7 +55,7 @@ FScriptableFrameworkEditorStyle::FScriptableFrameworkEditorStyle()
 
 	Set("ScriptableFramework.Param.Label", FTextBlockStyle(NormalText)
 								.SetFont(FAppStyle::GetFontStyle(TEXT("PropertyWindow.BoldFont")))
-								.SetFontSize(7));
+								.SetFontSize(8));
 
 	Set("ScriptableFramework.Param.Background", new FSlateRoundedBoxBrush(FStyleColors::Hover, 6.f));
 }

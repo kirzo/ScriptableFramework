@@ -41,7 +41,7 @@ public:
 public:
 	/** Execution mode for the tasks (e.g., Sequence vs Parallel). */
 	UPROPERTY(EditAnywhere, Category = "Config")
-	EScriptableActionMode Mode = EScriptableActionMode::Sequence;
+	EScriptableActionMode Mode = EScriptableActionMode::Parallel;
 
 	/** Shared memory (Blackboard) for this action execution. */
 	UPROPERTY(EditAnywhere, Category = "Config")

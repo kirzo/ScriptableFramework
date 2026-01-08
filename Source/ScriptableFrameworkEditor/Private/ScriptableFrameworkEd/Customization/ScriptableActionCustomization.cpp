@@ -9,6 +9,10 @@
 #include "PropertyCustomizationHelpers.h"
 #include "ScopedTransaction.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
+#include "Widgets/Input/SButton.h"
+#include "Widgets/Layout/SBorder.h"
+#include "Widgets/Text/STextBlock.h"
+#include "Widgets/Images/SImage.h"
 
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableTasks/ScriptableAction.h"
@@ -31,6 +35,7 @@ void FScriptableActionCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 
 	ActionHandle = PropertyHandle;
 	TasksHandle = ActionHandle->GetChildHandle(GET_MEMBER_NAME_CHECKED(FScriptableAction, Tasks));
+	ModeHandle = ActionHandle->GetChildHandle(GET_MEMBER_NAME_CHECKED(FScriptableAction, Mode));
 
 	FName ClassCategory; FName PropCategory;
 	ScriptableFrameworkEditor::GetScriptableCategory(UScriptableTask::StaticClass(), ClassCategory, PropCategory);
@@ -58,7 +63,39 @@ void FScriptableActionCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 		]
 		.ExtensionContent()
 		[
-			AddTaskComboButton.ToSharedRef()
+			SNew(SHorizontalBox)
+				// Mode Pill
+				+ SHorizontalBox::Slot()
+				.AutoWidth()
+				.VAlign(VAlign_Center)
+				.Padding(0, 0, 6, 0)
+				[
+					SNew(SButton)
+						.ButtonStyle(FAppStyle::Get(), "HoverHintOnly")
+						.OnClicked(this, &FScriptableActionCustomization::OnModeClicked)
+						.ToolTipText(LOCTEXT("ToggleModeTooltip", "Toggle between Sequence and Parallel execution."))
+						.ContentPadding(0)
+						[
+							SNew(SBorder)
+								.Padding(FMargin(8, 1))
+								.BorderImage(FScriptableFrameworkEditorStyle::Get().GetBrush("ScriptableFramework.Param.Background"))
+								.BorderBackgroundColor(this, &FScriptableActionCustomization::GetModeColor)
+								.VAlign(VAlign_Center)
+								[
+									SNew(STextBlock)
+										.Text(this, &FScriptableActionCustomization::GetModeText)
+										.TextStyle(FScriptableFrameworkEditorStyle::Get(), "ScriptableFramework.Param.Label")
+										.ColorAndOpacity(FLinearColor::White)
+								]
+						]
+				]
+			// Add Task Button
+			+ SHorizontalBox::Slot()
+				.AutoWidth()
+				.VAlign(VAlign_Center)
+				[
+					AddTaskComboButton.ToSharedRef()
+				]
 		];
 }
 
@@ -72,6 +109,50 @@ void FScriptableActionCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 	ArrayBuilder->OnGenerateArrayElementWidget(FOnGenerateArrayElementWidget::CreateSP(this, &FScriptableActionCustomization::OnGenerateElement));
 
 	ChildBuilder.AddCustomBuilder(ArrayBuilder);
+}
+
+FText FScriptableActionCustomization::GetModeText() const
+{
+	uint8 Value;
+	if (ModeHandle.IsValid() && ModeHandle->GetValue(Value) == FPropertyAccess::Success)
+	{
+		const EScriptableActionMode Mode = (EScriptableActionMode)Value;
+		switch (Mode)
+		{
+			case EScriptableActionMode::Sequence: return LOCTEXT("ModeSequence", "Sequence");
+			case EScriptableActionMode::Parallel: return LOCTEXT("ModeParallel", "Parallel");
+		}
+	}
+	return FText::GetEmpty();
+}
+
+FSlateColor FScriptableActionCustomization::GetModeColor() const
+{
+	uint8 Value;
+	if (ModeHandle.IsValid() && ModeHandle->GetValue(Value) == FPropertyAccess::Success)
+	{
+		const EScriptableActionMode Mode = (EScriptableActionMode)Value;
+		// Green for Sequence, Blue/Purple for Parallel
+		return Mode == EScriptableActionMode::Sequence ? FLinearColor(0.02f, 0.4f, 0.1f) : FLinearColor(0.1f, 0.2f, 0.4f);
+	}
+	return FSlateColor::UseForeground();
+}
+
+FReply FScriptableActionCustomization::OnModeClicked()
+{
+	if (ModeHandle.IsValid())
+	{
+		uint8 Value;
+		if (ModeHandle->GetValue(Value) == FPropertyAccess::Success)
+		{
+			const EScriptableActionMode CurrentMode = (EScriptableActionMode)Value;
+			const EScriptableActionMode NewMode = (CurrentMode == EScriptableActionMode::Sequence) ? EScriptableActionMode::Parallel : EScriptableActionMode::Sequence;
+
+			FScopedTransaction Transaction(LOCTEXT("ToggleActionMode", "Toggle Action Mode"));
+			ModeHandle->SetValue((uint8)NewMode);
+		}
+	}
+	return FReply::Handled();
 }
 
 void FScriptableActionCustomization::OnTaskClassPicked(const UStruct* InStruct, const FAssetData& AssetData)
