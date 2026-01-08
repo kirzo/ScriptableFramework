@@ -86,8 +86,8 @@ void FScriptableFrameworkEditorModule::RegisterPropertyLayout(FPropertyEditorMod
 
 void FScriptableFrameworkEditorModule::RegisterAssetTools()
 {
-	RegisterAssetTypeAction<UScriptableTaskAsset>(INVTEXT("Scriptable Task"), FColor(0, 169, 255));
-	RegisterAssetTypeAction<UScriptableConditionAsset>(INVTEXT("Scriptable Condition"), FColor(145, 2, 23));
+	RegisterAssetTypeAction<UScriptableTaskAsset>(INVTEXT("Scriptable Task"), FScriptableFrameworkEditorStyle::ScriptableTaskColor);
+	RegisterAssetTypeAction<UScriptableConditionAsset>(INVTEXT("Scriptable Condition"), FScriptableFrameworkEditorStyle::ScriptableConditionColor);
 }
 
 void FScriptableFrameworkEditorModule::UnregisterAssetTools()

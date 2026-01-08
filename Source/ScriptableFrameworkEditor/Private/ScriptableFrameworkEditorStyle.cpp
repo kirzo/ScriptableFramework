@@ -9,6 +9,9 @@
 #define BOX_BRUSH( RelativePath, ... ) FSlateBoxBrush( RootToContentDir( RelativePath, TEXT(".png") ), __VA_ARGS__ )
 #define BORDER_BRUSH( RelativePath, ... ) FSlateBorderBrush( RootToContentDir( RelativePath, TEXT(".png") ), __VA_ARGS__ )
 
+FColor FScriptableFrameworkEditorStyle::ScriptableTaskColor = FColor(0, 169, 255);
+FColor FScriptableFrameworkEditorStyle::ScriptableConditionColor = FColor(145, 2, 23);
+
 void FScriptableFrameworkEditorStyle::Register()
 {
 	FSlateStyleRegistry::RegisterSlateStyle(Get());
