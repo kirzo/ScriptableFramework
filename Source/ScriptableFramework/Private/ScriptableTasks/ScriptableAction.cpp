@@ -3,6 +3,8 @@
 #include "ScriptableTasks/ScriptableAction.h"
 #include "ScriptableTasks/ScriptableTask.h"
 
+UE_DISABLE_OPTIMIZATION
+
 FScriptableAction::FScriptableAction()
 {
 }
@@ -32,19 +34,19 @@ void FScriptableAction::Register(UObject* InOwner)
 			// Register the task into our local Binding Map.
 			AddBindingSource(Task);
 
-			// Initialize the task with the owner context
-			Task->Register(Owner);
+			if (Task->IsEnabled())
+			{
+				Task->Register(Owner);
+			}
 		}
 	}
 }
 
 void FScriptableAction::Unregister()
 {
-	Stop();
-
 	for (UScriptableTask* Task : Tasks)
 	{
-		if (Task)
+		if (Task && Task->IsEnabled())
 		{
 			Task->Unregister();
 		}
@@ -67,28 +69,26 @@ void FScriptableAction::Begin()
 
 	if (Mode == EScriptableActionMode::Sequence)
 	{
-		ExecuteNextSequenceTask();
+		BeginSubTask(Tasks[CurrentTaskIndex]);
 	}
 	else if (Mode == EScriptableActionMode::Parallel)
 	{
 		for (UScriptableTask* Task : Tasks)
 		{
-			if (Task)
-			{
-				Task->Begin();
-			}
+			BeginSubTask(Task);
 		}
 	}
 }
 
-void FScriptableAction::Stop()
+void FScriptableAction::Finish()
 {
 	if (!bIsRunning) return;
 
 	for (UScriptableTask* Task : Tasks)
 	{
-		if (Task && Task->HasBegun() && !Task->HasFinished())
+		if (Task)
 		{
+			Task->OnTaskFinishNative.RemoveAll(this);
 			Task->Finish();
 		}
 	}
@@ -97,95 +97,34 @@ void FScriptableAction::Stop()
 	CurrentTaskIndex = 0;
 }
 
-void FScriptableAction::Tick(float DeltaTime)
+void FScriptableAction::BeginSubTask(UScriptableTask* Task)
 {
-	if (!bIsRunning) return;
-
-	bool bAllFinished = true;
-
-	// Polling logic for execution
-	for (UScriptableTask* Task : Tasks)
+	if (!Task || !Task->IsEnabled())
 	{
-		if (Task)
-		{
-			const bool bShouldTick = (Mode == EScriptableActionMode::Parallel) || (Mode == EScriptableActionMode::Sequence && Tasks.IndexOfByKey(Task) == CurrentTaskIndex);
-
-			if (bShouldTick)
-			{
-				if (Task->HasBegun() && !Task->HasFinished())
-				{
-					if (Task->CanEverTick())
-					{
-						Task->Tick(DeltaTime);
-					}
-
-					if (Task->HasFinished())
-					{
-						OnSubTaskFinished(Task);
-					}
-					else
-					{
-						bAllFinished = false;
-					}
-				}
-				else if (Mode == EScriptableActionMode::Parallel && !Task->HasBegun())
-				{
-					bAllFinished = false;
-				}
-			}
-		}
+		OnSubTaskFinished(Task);
+		return;
 	}
 
-	if (bAllFinished && Mode == EScriptableActionMode::Parallel)
-	{
-		bIsRunning = false;
-	}
-}
-
-void FScriptableAction::ExecuteNextSequenceTask()
-{
-	if (Tasks.IsValidIndex(CurrentTaskIndex))
-	{
-		UScriptableTask* Task = Tasks[CurrentTaskIndex];
-		if (Task)
-		{
-			Task->Reset();
-			Task->Begin();
-		}
-		else
-		{
-			OnSubTaskFinished(nullptr);
-		}
-	}
-	else
-	{
-		bIsRunning = false;
-	}
+	Task->OnTaskFinishNative.RemoveAll(this);
+	Task->OnTaskFinishNative.AddRaw(this, &FScriptableAction::OnSubTaskFinished);
+	Task->Begin();
 }
 
 void FScriptableAction::OnSubTaskFinished(UScriptableTask* Task)
 {
-	if (Mode == EScriptableActionMode::Sequence)
+	if (Task)
 	{
-		CurrentTaskIndex++;
-		ExecuteNextSequenceTask();
+		Task->OnTaskFinishNative.RemoveAll(this);
 	}
-	else if (Mode == EScriptableActionMode::Parallel)
-	{
-		bool bAnyRunning = false;
-		for (UScriptableTask* SubTask : Tasks)
-		{
-			if (SubTask && !SubTask->HasFinished())
-			{
-				bAnyRunning = true;
-				break;
-			}
-		}
 
-		if (!bAnyRunning)
-		{
-			bIsRunning = false;
-		}
+	// In Parallel mode CurrentTaskIndex acts as a counter
+	if (++CurrentTaskIndex >= Tasks.Num())
+	{
+		Finish();
+	}
+	else if (Mode == EScriptableActionMode::Sequence)
+	{
+		BeginSubTask(Tasks[CurrentTaskIndex]);
 	}
 }
 
@@ -202,7 +141,7 @@ void FScriptableAction::AddBindingSource(UScriptableObject* InSource)
 {
 	if (InSource)
 	{
-		InSource->InitRuntimeData(&Context);
+		InSource->InitRuntimeData(&Context, &BindingSourceMap);
 
 		FGuid ID = InSource->GetBindingID();
 		if (ID.IsValid())
@@ -211,3 +150,18 @@ void FScriptableAction::AddBindingSource(UScriptableObject* InSource)
 		}
 	}
 }
+
+void FScriptableAction::RunAction(UObject* Owner, FScriptableAction& Action)
+{
+	if (!Owner) return;
+
+	if (Action.IsRunning())
+	{
+		Action.Finish();
+	}
+
+	Action.Register(Owner);
+	Action.Begin();
+}
+
+UE_ENABLE_OPTIMIZATION

@@ -87,11 +87,8 @@ public:
 	/** Starts the execution of the action. */
 	void Begin();
 
-	/** Stops execution immediately. */
-	void Stop();
-
-	/** Updates the action. Must be called by the owner's Tick. */
-	void Tick(float DeltaTime);
+	/** Finish the execution immediately. */
+	void Finish();
 
 	/** Returns true if the action is currently executing. */
 	bool IsRunning() const { return bIsRunning; }
@@ -137,7 +134,10 @@ private:
 	/** Registers a source into the map (called internally during Register). */
 	void AddBindingSource(UScriptableObject* InSource);
 
-	void ExecuteNextSequenceTask();
-
+	void BeginSubTask(UScriptableTask* Task);
 	void OnSubTaskFinished(UScriptableTask* Task);
+
+public:
+	/** Static entry point to run an action. Handles registration and startup. */
+	static void RunAction(UObject* Owner, FScriptableAction& Action);
 };

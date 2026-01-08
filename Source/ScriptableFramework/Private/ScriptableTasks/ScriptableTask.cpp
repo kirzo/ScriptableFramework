@@ -6,12 +6,16 @@
 
 #include "Algo/AnyOf.h"
 
+UE_DISABLE_OPTIMIZATION
+
 DEFINE_LOG_CATEGORY(LogScriptableTask);
 
 void UScriptableTask::OnUnregister()
 {
 	Super::OnUnregister();
 
+	OnTaskBeginNative.Clear();
+	OnTaskFinishNative.Clear();
 	OnTaskBegin.Clear();
 	OnTaskFinish.Clear();
 }
@@ -35,16 +39,18 @@ void UScriptableTask::Begin()
 	Status = EScriptableTaskStatus::Begun;
 	RegisterTickFunctions(true);
 	BeginTask();
+	OnTaskBeginNative.Broadcast(this);
 	OnTaskBegin.Broadcast(this);
 }
 
 void UScriptableTask::Finish()
 {
-	if (HasBegun())
+	if (HasBegun() && !HasFinished() && IsEnabled())
 	{
 		Status = EScriptableTaskStatus::Finished;
 		RegisterTickFunctions(false);
 		FinishTask();
+		OnTaskFinishNative.Broadcast(this);
 		OnTaskFinish.Broadcast(this);
 	}
 }
@@ -638,3 +644,5 @@ void UScriptableTask_RunAsset::ClearTaskInstance()
 	}
 	bCanEverTick = false;
 }
+
+UE_ENABLE_OPTIMIZATION

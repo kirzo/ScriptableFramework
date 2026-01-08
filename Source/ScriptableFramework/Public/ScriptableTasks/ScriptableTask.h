@@ -11,6 +11,7 @@ SCRIPTABLEFRAMEWORK_API DECLARE_LOG_CATEGORY_EXTERN(LogScriptableTask, Log, All)
 class UScriptableTask;
 class UScriptableCondition;
 
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnScriptableTaskFinishedNative, UScriptableTask* /*Task*/);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FScriptableTaskEventSignature, UScriptableTask*, Task);
 
 UENUM()
@@ -61,6 +62,9 @@ public:
 	*/
 	UFUNCTION(BlueprintCallable, Category = ScriptableTask)
 	void Finish();
+
+	FOnScriptableTaskFinishedNative OnTaskBeginNative;
+	FOnScriptableTaskFinishedNative OnTaskFinishNative;
 
 	UPROPERTY(BlueprintAssignable)
 	FScriptableTaskEventSignature OnTaskBegin;
