@@ -29,11 +29,11 @@ void FScriptableAction::Register(UObject* InOwner)
 	{
 		if (Task)
 		{
-			// Initialize the task with the owner context
-			Task->Register(Owner);
-
 			// Register the task into our local Binding Map.
 			AddBindingSource(Task);
+
+			// Initialize the task with the owner context
+			Task->Register(Owner);
 		}
 	}
 }
@@ -202,6 +202,8 @@ void FScriptableAction::AddBindingSource(UScriptableObject* InSource)
 {
 	if (InSource)
 	{
+		InSource->InitRuntimeData(&Context);
+
 		FGuid ID = InSource->GetBindingID();
 		if (ID.IsValid())
 		{

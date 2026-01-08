@@ -677,7 +677,7 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 	UScriptableObject* Obj = ScriptableObject.Get();
 	if (Obj)
 	{
-		ScriptableFrameworkEditor::GetAccessibleStructs(Obj, AccessibleStructs);
+		ScriptableFrameworkEditor::GetAccessibleStructs(Obj, InPropertyHandle, AccessibleStructs);
 	}
 
 	uint32 NumberOfChild;
@@ -1020,50 +1020,47 @@ void FScriptableObjectCustomization::GenerateArrayElement(TSharedRef<IPropertyHa
 
 void FScriptableObjectCustomization::BindPropertyRow(IDetailPropertyRow& Row, TSharedRef<IPropertyHandle> Handle, UScriptableObject* Obj)
 {
-	// Fetch accessible structs
+	// 1. Fetch available variables (Need Action Handle for this to find Context)
 	TArray<FBindableStructDesc> AccessibleStructs;
-	ScriptableFrameworkEditor::GetAccessibleStructs(Obj, AccessibleStructs);
+	ScriptableFrameworkEditor::GetAccessibleStructs(Obj, Handle, AccessibleStructs);
 
-	// Prepare Path and Cache
+	// 2. Paths
 	FPropertyBindingPath TargetPath;
 	ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(Obj, Handle, TargetPath);
 
 	TSharedPtr<ScriptableBindingUI::FCachedBindingData> CachedData =
 		MakeShared<ScriptableBindingUI::FCachedBindingData>(Obj, TargetPath, Handle, AccessibleStructs);
 
-	// Reset Handler Logic
-	FIsResetToDefaultVisible IsResetVisible = FIsResetToDefaultVisible::CreateLambda([this, Handle](TSharedPtr<IPropertyHandle> InHandle)
+	// 3. Reset Handler Logic (Local to Object now!)
+	FIsResetToDefaultVisible IsResetVisible = FIsResetToDefaultVisible::CreateLambda([this, TargetPath, Handle](TSharedPtr<IPropertyHandle> InHandle)
 	{
-		if (!ScriptableObject.IsValid()) return false;
-
-		FPropertyBindingPath TP;
-		ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject.Get(), Handle, TP);
-
-		if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP)) return true;
+		if (UScriptableObject* MyObj = ScriptableObject.Get())
+		{
+			// Check local bindings
+			if (MyObj->GetPropertyBindings().HasPropertyBinding(TargetPath)) return true;
+		}
 		return InHandle->DiffersFromDefault();
 	});
 
-	FResetToDefaultHandler ResetHandler = FResetToDefaultHandler::CreateLambda([this, Handle, CachedData](TSharedPtr<IPropertyHandle> InHandle)
+	FResetToDefaultHandler ResetHandler = FResetToDefaultHandler::CreateLambda([this, TargetPath, Handle, CachedData](TSharedPtr<IPropertyHandle> InHandle)
 	{
-		if (!ScriptableObject.IsValid()) return;
-
-		FScopedTransaction Transaction(LOCTEXT("Reset", "Reset Property"));
-		ScriptableObject->Modify();
-
-		FPropertyBindingPath TP;
-		ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject.Get(), Handle, TP);
-
-		if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP))
+		if (UScriptableObject* MyObj = ScriptableObject.Get())
 		{
-			ScriptableObject->GetPropertyBindings().RemovePropertyBindings(TP);
-			if (CachedData) CachedData->Invalidate();
+			FScopedTransaction Transaction(LOCTEXT("Reset", "Reset Property"));
+			MyObj->Modify();
+
+			// Remove local binding
+			if (MyObj->GetPropertyBindings().HasPropertyBinding(TargetPath))
+			{
+				MyObj->GetPropertyBindings().RemovePropertyBindings(TargetPath);
+				if (CachedData) CachedData->Invalidate();
+			}
 		}
 		InHandle->ResetToDefault();
 	});
 
 	Row.OverrideResetToDefault(FResetToDefaultOverride::Create(IsResetVisible, ResetHandler));
 
-	// Inject UI
 	ScriptableBindingUI::ModifyRow(Obj, Row, CachedData);
 }
 

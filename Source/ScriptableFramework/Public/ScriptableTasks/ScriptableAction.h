@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "StructUtils/PropertyBag.h"
+#include "Utils/PropertyBagHelpers.h"
+#include "Bindings/ScriptablePropertyBindings.h"
 #include "ScriptableAction.generated.h"
 
 class UScriptableObject;
@@ -65,10 +67,7 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UObject> Owner = nullptr;
 
-	/**
-	 * Lookup Map for Runtime Bindings (Sources).
-	 * Maps BindingID -> Object Instance.
-	 */
+	/** Runtime lookup map for Sibling bindings (Guid -> Object Instance). */
 	UPROPERTY(Transient)
 	TMap<FGuid, TObjectPtr<UScriptableObject>> BindingSourceMap;
 
@@ -101,6 +100,35 @@ public:
 
 	FInstancedPropertyBag& GetContext() { return Context; }
 	const FInstancedPropertyBag& GetContext() const { return Context; }
+
+	bool HasContextProperty(const FName& Name) const
+	{
+		return Context.FindPropertyDescByName(Name) != nullptr;
+	}
+
+	void ResetContext()
+	{
+		Context.Reset();
+	}
+
+	template <typename T>
+	void AddContextProperty(const FName& Name)
+	{
+		ScriptablePropertyBag::Add<T>(Context, Name);
+	}
+
+	template <typename T>
+	void SetContextProperty(const FName& Name, const T& Value)
+	{
+		ScriptablePropertyBag::Set(Context, Name, Value);
+	}
+
+	template <typename T>
+	T GetContextProperty(const FName& Name) const
+	{
+		auto Result = ScriptablePropertyBag::Get<T>(Context, Name);
+		return Result.HasValue() ? Result.GetValue() : T();
+	}
 
 	/** Finds a registered task/object by its persistent ID (used by Property Bindings). */
 	UScriptableObject* FindBindingSource(const FGuid& InID) const;

@@ -8,7 +8,6 @@
 #include "ScriptableObjectTypes.h"
 #include "PropertyBindingPath.h"
 #include "Bindings/ScriptablePropertyBindings.h"
-#include "Utils/PropertyBagHelpers.h"
 #include "ScriptableObject.generated.h"
 
 SCRIPTABLEFRAMEWORK_API DECLARE_LOG_CATEGORY_EXTERN(LogScriptableObject, Log, All);
@@ -104,37 +103,16 @@ public:
 	/** Returns the persistent binding ID. */
 	FGuid GetBindingID() const { return BindingID; }
 
+	/** Injects the shared data from the owning container. */
+	void InitRuntimeData(const FInstancedPropertyBag* InContext);
+
+	/** Propagates the runtime data to a child object. */
+	void PropagateRuntimeData(UScriptableObject* Child) const;
+
 	/** Resolves and applies bindings (copies data from sources to this object). */
 	void ResolveBindings();
 
-	// --- Context Accessors ---
-
-	FInstancedPropertyBag& GetContext() { return Context; }
-	const FInstancedPropertyBag& GetContext() const { return Context; }
-
-	bool HasContextProperty(const FName& Name) const
-	{
-		return Context.FindPropertyDescByName(Name) != nullptr;
-	}
-
-	template <typename T>
-	void AddContextProperty(const FName& Name)
-	{
-		ScriptablePropertyBag::Add<T>(Context, Name);
-	}
-
-	template <typename T>
-	void SetContextProperty(const FName& Name, const T& Value)
-	{
-		ScriptablePropertyBag::Set(Context, Name, Value);
-	}
-
-	template <typename T>
-	T GetContextProperty(const FName& Name) const
-	{
-		auto Result = ScriptablePropertyBag::Get<T>(Context, Name);
-		return Result.HasValue() ? Result.GetValue() : T();
-	}
+	const FInstancedPropertyBag* GetContext() const { return ContextRef; }
 
 	// --- Runtime Binding Resolution (Root Only Logic) ---
 
@@ -173,14 +151,13 @@ protected:
 	FScriptableObjectTickFunction PrimaryObjectTick;
 
 private:
+	/** Input data (Context) available for this object and its children. */
+	const FInstancedPropertyBag* ContextRef = nullptr;
+
 	/** Unique identifier for bindings. Persists across duplication. */
 	UPROPERTY(meta = (NoBinding))
 	FGuid BindingID;
-
-	/** Input data (Context) available for this object and its children. */
-	UPROPERTY(EditAnywhere, Category = Hidden, meta = (NoBinding))
-	FInstancedPropertyBag Context;
-
+	
 	/** Data bindings definition. */
 	UPROPERTY(meta = (NoBinding))
 	FScriptablePropertyBindings PropertyBindings;

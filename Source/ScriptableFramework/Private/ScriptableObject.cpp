@@ -112,15 +112,6 @@ void UScriptableObject::Register(UObject* Owner)
 
 		if (IsRegistered())
 		{
-			// Before calling OnRegister, we ensure this object is discoverable by the Root.
-			if (BindingID.IsValid())
-			{
-				if (UScriptableObject* Root = GetRoot())
-				{
-					Root->RegisterBindingSource(BindingID, this);
-				}
-			}
-
 			OnRegister();
 		}
 	}
@@ -137,14 +128,6 @@ void UScriptableObject::Unregister()
 		return;
 	}
 
-	if (BindingID.IsValid())
-	{
-		if (UScriptableObject* Root = GetRoot())
-		{
-			Root->UnregisterBindingSource(BindingID);
-		}
-	}
-
 	FWorldDelegates::OnWorldBeginTearDown.Remove(OnWorldBeginTearDownHandle);
 	RegisterTickFunctions(false);
 
@@ -153,6 +136,8 @@ void UScriptableObject::Unregister()
 
 	WorldPrivate = nullptr;
 	bRegistered = false;
+
+	ContextRef = nullptr;
 
 	OnUnregister();
 }
@@ -304,6 +289,19 @@ FName FScriptableObjectTickFunction::DiagnosticContext(bool bDetailed)
 // -------------------------------------------------------------------
 //  Data Binding & Context
 // -------------------------------------------------------------------
+
+void UScriptableObject::InitRuntimeData(const FInstancedPropertyBag* InContext)
+{
+	ContextRef = InContext;
+}
+
+void UScriptableObject::PropagateRuntimeData(UScriptableObject* Child) const
+{
+	if (Child)
+	{
+		Child->InitRuntimeData(ContextRef);
+	}
+}
 
 void UScriptableObject::ResolveBindings()
 {

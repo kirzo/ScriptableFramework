@@ -104,14 +104,16 @@ void FScriptablePropertyBindings::ResolveBindings(UScriptableObject* TargetObjec
 {
 	if (!TargetObject) return;
 
-	UScriptableObject* Root = TargetObject->GetRoot();
-	if (!Root) return;
+	UScriptableObject* Root = TargetObject->GetRoot(); // Used for sibling lookup via FindBindingSource
 
 	// Prepare the Context View in advance (it might be used by multiple bindings)
+	const FInstancedPropertyBag* Context = TargetObject->GetContext();
+
+	// Prepare Context View
 	FPropertyBindingDataView ContextView;
-	if (Root->GetContext().IsValid())
+	if (Context && Context->IsValid())
 	{
-		ContextView = FPropertyBindingDataView(Root->GetContext().GetValue().GetScriptStruct(), Root->GetContext().GetMutableValue().GetMemory());
+		ContextView = FPropertyBindingDataView(Context->GetPropertyBagStruct(), const_cast<FInstancedPropertyBag*>(Context)->GetMutableValue().GetMemory());
 	}
 
 	// The Target View is always the object requesting the resolution
@@ -125,7 +127,7 @@ void FScriptablePropertyBindings::ResolveBindings(UScriptableObject* TargetObjec
 		{
 			// CASE A: Sibling Binding
 			// We look for the persistent ID in the runtime hierarchy
-			UScriptableObject* SourceObj = Root->FindBindingSource(Binding.SourceID);
+			UScriptableObject* SourceObj = Root ? Root->FindBindingSource(Binding.SourceID) : nullptr;
 
 			if (SourceObj)
 			{
@@ -140,18 +142,14 @@ void FScriptablePropertyBindings::ResolveBindings(UScriptableObject* TargetObjec
 		else
 		{
 			// CASE B: Context Binding
-			if (ContextView.IsValid())
-			{
-				SourceView = ContextView;
-			}
-			else
-			{
-				continue;
-			}
+			SourceView = ContextView;
 		}
 
 		// Perform the Copy
-		CopySingleBinding(Binding, SourceView, TargetView);
+		if (SourceView.IsValid())
+		{
+			CopySingleBinding(Binding, SourceView, TargetView);
+		}
 	}
 }
 

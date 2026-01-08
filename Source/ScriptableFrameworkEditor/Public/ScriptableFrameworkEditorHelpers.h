@@ -32,8 +32,8 @@ namespace ScriptableFrameworkEditor
 	/** Generates the deterministic Runtime ID (BindingID) for an object. */
 	FGuid GetScriptableObjectDataID(UScriptableObject* Owner);
 
-	/** Scans the hierarchy to find bindable sources (Parents, Siblings, Context). */
-	void GetAccessibleStructs(const UScriptableObject* TargetObject, TArray<FBindableStructDesc>& OutStructDescs);
+	/** Scans the hierarchy to find bindable sources (Action Context, Parents, Siblings). */
+	void GetAccessibleStructs(const UScriptableObject* TargetObject, const TSharedPtr<IPropertyHandle>& Handle, TArray<FBindableStructDesc>& OutStructDescs);
 
 	/** Generates a full binding path from a PropertyHandle (Source of Truth). */
 	void MakeStructPropertyPathFromPropertyHandle(UScriptableObject* ScriptableObject, TSharedPtr<const IPropertyHandle> InPropertyHandle, FPropertyBindingPath& OutPath);
@@ -41,5 +41,11 @@ namespace ScriptableFrameworkEditor
 	/** Converts a PropertyAccess BindingChain into our FPropertyBindingPath format. */
 	void MakeStructPropertyPathFromBindingChain(const FGuid& StructID, const TArray<FBindingChainElement>& InBindingChain, FPropertyBindingPath& OutPath);
 
+	/** Helper to set the internal asset on wrapper tasks. */
 	void SetWrapperAssetProperty(TSharedPtr<IPropertyHandle> Handle, UObject* Asset);
+
+	// --- Action & Binding Helpers ---
+
+	/** Finds the PropertyHandle for the FScriptableAction struct that contains the given child handle. */
+	TSharedPtr<IPropertyHandle> FindActionStructHandle(TSharedPtr<IPropertyHandle> ChildHandle);
 }

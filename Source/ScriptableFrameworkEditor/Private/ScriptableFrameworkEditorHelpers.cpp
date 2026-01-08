@@ -4,9 +4,12 @@
 #include "PropertyHandle.h"
 #include "ScriptableObject.h"
 #include "ScriptableTasks/ScriptableTask.h"
+#include "ScriptableTasks/ScriptableAction.h"
 #include "ScriptableConditions/ScriptableCondition.h"
 #include "StructUtils/InstancedStruct.h"
 #include "IPropertyAccessEditor.h"
+
+UE_DISABLE_OPTIMIZATION
 
 namespace ScriptableObjectTraversal
 {
@@ -107,14 +110,11 @@ namespace ScriptableFrameworkEditor
 			return true;
 		}
 
-		// Arrays must be handled strictly because CopyCompleteValue cannot convert element types (e.g. Int to Float).
-		// If SameType (Step 1) failed, it means they are not identical.
+		// Arrays
 		if (const FArrayProperty* SourceArray = CastField<FArrayProperty>(SourceProp))
 		{
 			if (const FArrayProperty* TargetArray = CastField<FArrayProperty>(TargetProp))
 			{
-				// Allow Covariance for Arrays of Objects (e.g. Array<MyActor> -> Array<AActor>)
-				// Since they are pointers, the memory layout is compatible.
 				const FObjectPropertyBase* SourceInner = CastField<FObjectPropertyBase>(SourceArray->Inner);
 				const FObjectPropertyBase* TargetInner = CastField<FObjectPropertyBase>(TargetArray->Inner);
 
@@ -122,24 +122,13 @@ namespace ScriptableFrameworkEditor
 				{
 					return SourceInner->PropertyClass->IsChildOf(TargetInner->PropertyClass);
 				}
-
-				// For any other array type (Int, Float, Struct), we require strict equality (Step 1).
-				// If we are here, they didn't match, so we reject them.
 				return false;
 			}
-
-			// Source is Array, Target is NOT Array -> Incompatible
 			return false;
 		}
+		if (TargetProp->IsA<FArrayProperty>()) return false;
 
-		// Target is Array, Source is NOT Array -> Incompatible
-		if (TargetProp->IsA<FArrayProperty>())
-		{
-			return false;
-		}
-
-		// 2. Objects: Allow if source is child of target (Inheritance)
-		// (Copied from StateTreePropertyBindings.cpp)
+		// 2. Objects: Covariance
 		if (const FObjectPropertyBase* SourceObj = CastField<FObjectPropertyBase>(SourceProp))
 		{
 			if (const FObjectPropertyBase* TargetObj = CastField<FObjectPropertyBase>(TargetProp))
@@ -148,23 +137,11 @@ namespace ScriptableFrameworkEditor
 			}
 		}
 
-		// 3. Special Case UE5: Vectors (Struct vs Double)
-		// If both have the same C++ type (e.g., "FVector"), they are compatible even if Unreal says no.
-		if (SourceProp->GetCPPType() == TargetProp->GetCPPType())
-		{
-			return true;
-		}
-
-		// 4. Numeric Promotions (Simplified from StateTree)
-		// Allow connecting Float to Double
+		// 3. Numeric Promotions
 		const bool bSourceIsReal = SourceProp->IsA<FFloatProperty>() || SourceProp->IsA<FDoubleProperty>();
 		const bool bTargetIsReal = TargetProp->IsA<FFloatProperty>() || TargetProp->IsA<FDoubleProperty>();
 		if (bSourceIsReal && bTargetIsReal) return true;
-
-		// Allow connecting Int to Float/Double
 		if (SourceProp->IsA<FIntProperty>() && bTargetIsReal) return true;
-
-		// Allow Bool to Numeric
 		if (SourceProp->IsA<FBoolProperty>() && TargetProp->IsA<FNumericProperty>()) return true;
 
 		return false;
@@ -190,29 +167,56 @@ namespace ScriptableFrameworkEditor
 		return Owner ? Owner->GetBindingID() : FGuid();
 	}
 
-	void ScriptableFrameworkEditor::GetAccessibleStructs(const UScriptableObject* TargetObject, TArray<FBindableStructDesc>& OutStructDescs)
+	TSharedPtr<IPropertyHandle> FindActionStructHandle(TSharedPtr<IPropertyHandle> ChildHandle)
+	{
+		TSharedPtr<IPropertyHandle> Current = ChildHandle;
+		while (Current.IsValid())
+		{
+			if (const FStructProperty* StructProp = CastField<FStructProperty>(Current->GetProperty()))
+			{
+				if (StructProp->Struct == FScriptableAction::StaticStruct())
+				{
+					return Current;
+				}
+			}
+			Current = Current->GetParentHandle();
+		}
+		return nullptr;
+	}
+
+	void GetAccessibleStructs(const UScriptableObject* TargetObject, const TSharedPtr<IPropertyHandle>& Handle, TArray<FBindableStructDesc>& OutStructDescs)
 	{
 		if (!TargetObject) return;
 		const UScriptableObject* RootObject = TargetObject->GetRoot();
 		if (!RootObject) return;
 
-		// 1. Context
-		const FInstancedPropertyBag& Bag = RootObject->GetContext();
-		if (Bag.IsValid())
+		// 1. Context (From FScriptableAction via Handle)
+		// We try to find the Action struct walking up the handle hierarchy.
+		if (TSharedPtr<IPropertyHandle> ActionHandle = FindActionStructHandle(Handle))
 		{
-			FBindableStructDesc& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
-			ContextDesc.Name = FName(TEXT("Context"));
-			ContextDesc.Struct = Bag.GetPropertyBagStruct();
-			ContextDesc.ID = FGuid();
+			// We access the raw data of the struct to read the Context
+			void* ActionData = nullptr;
+			if (ActionHandle->GetValueData(ActionData) == FPropertyAccess::Success && ActionData)
+			{
+				const FScriptableAction* Action = static_cast<const FScriptableAction*>(ActionData);
+				if (Action->Context.IsValid())
+				{
+					FBindableStructDesc& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
+					ContextDesc.Name = FName(TEXT("Context"));
+					ContextDesc.Struct = Action->Context.GetPropertyBagStruct();
+					ContextDesc.ID = FGuid(); // Context ID is empty/null
+				}
+			}
 		}
 
-		// 2. Traversal
+		// 2. Traversal (Siblings/Parents)
 		TArray<const UScriptableObject*> AccessibleObjects;
 		const UObject* IteratorNode = TargetObject;
 
 		while (IteratorNode)
 		{
 			const UObject* ParentNode = IteratorNode->GetOuter();
+			// Stop if we hit the top of the hierarchy (Action Owner or Package)
 			if (!ParentNode || ParentNode == RootObject->GetOuter()) break;
 
 			if (const UScriptableObject* ParentScriptableObject = Cast<UScriptableObject>(ParentNode))
@@ -339,3 +343,5 @@ namespace ScriptableFrameworkEditor
 		}
 	}
 }
+
+UE_ENABLE_OPTIMIZATION
