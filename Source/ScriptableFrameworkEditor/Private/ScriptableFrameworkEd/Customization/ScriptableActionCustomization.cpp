@@ -166,10 +166,10 @@ void FScriptableActionCustomization::OnTaskClassPicked(const UStruct* InStruct, 
 
 	if (AssetData.IsValid())
 	{
-		static const FName TaskAssetClassName(TEXT("ScriptableTaskAsset"));
+		static const FName ActionAssetClassName(TEXT("ScriptableActionAsset"));
 
-		// If the selected asset is a ScriptableTaskAsset, we need to wrap it.
-		if (AssetData.AssetClassPath.GetAssetName() == TaskAssetClassName)
+		// If the selected asset is a ScriptableActionAsset, we need to wrap it.
+		if (AssetData.AssetClassPath.GetAssetName() == ActionAssetClassName)
 		{
 			// Find the wrapper class (ScriptableTask_RunAsset)
 			UClass* RunAssetClass = FindObject<UClass>(nullptr, TEXT("/Script/ScriptableFramework.ScriptableTask_RunAsset"));

@@ -384,34 +384,33 @@ void UScriptableTask_RunAsset::OnRegister()
 {
 	Super::OnRegister();
 
-	if (!IsValid(Task))
+	if (!RuntimeAction.IsRunning())
 	{
-		CreateTaskInstance();
+		InstantiateRuntimeAction();
 	}
 }
 
 void UScriptableTask_RunAsset::OnUnregister()
 {
 	Super::OnUnregister();
-
-	ClearTaskInstance();
+	TeardownRuntimeAction();
 }
 
 void UScriptableTask_RunAsset::ResetTask()
 {
-	if (IsValid(Task))
+	if (RuntimeAction.IsRunning())
 	{
-		Task->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_RunAsset::OnSubTaskFinish);
-		Task->Reset();
+		RuntimeAction.Finish();
 	}
+
+	InstantiateRuntimeAction();
 }
 
 void UScriptableTask_RunAsset::BeginTask()
 {
-	if (IsValid(Task))
+	if (AssetToRun && !RuntimeAction.Tasks.IsEmpty())
 	{
-		Task->OnTaskFinish.AddDynamic(this, &UScriptableTask_RunAsset::OnSubTaskFinish);
-		Task->Begin();
+		RuntimeAction.Begin();
 	}
 	else
 	{
@@ -421,57 +420,47 @@ void UScriptableTask_RunAsset::BeginTask()
 
 void UScriptableTask_RunAsset::FinishTask()
 {
-	if (IsValid(Task))
-	{
-		Task->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_RunAsset::OnSubTaskFinish);
-		Task->Finish();
-		Task->Unregister();
-		Task = nullptr;
-
-		bCanEverTick = false;
-	}
+	// Ensure the inner action is stopped properly
+	RuntimeAction.Finish();
+	RuntimeAction.Unregister();
 }
 
-void UScriptableTask_RunAsset::Tick(float DeltaTime)
+void UScriptableTask_RunAsset::InstantiateRuntimeAction()
 {
-	if (Task->CanEverTick())
+	TeardownRuntimeAction();
+
+	if (AssetToRun)
 	{
-		Task->Tick(DeltaTime);
-	}
-}
+		// Copy the Struct
+		RuntimeAction = AssetToRun->Action;
 
-void UScriptableTask_RunAsset::OnSubTaskFinish(UScriptableTask* SubTask)
-{
-	SubTask->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_RunAsset::OnSubTaskFinish);
-	Finish();
-}
-
-void UScriptableTask_RunAsset::CreateTaskInstance()
-{
-	ClearTaskInstance();
-
-	if (IsValid(AssetToRun) && IsValid(AssetToRun->Task))
-	{
-		// Duplicate the template from the asset to create a unique instance for this execution context.
-		// We use 'this' as the outer to keep the hierarchy clean.
-		Task = DuplicateObject<UScriptableTask>(AssetToRun->Task, this);
-
-		if (IsValid(Task))
+		// Deep Copy Tasks
+		// The 'Tasks' array currently points to the Asset's archetype objects.
+		for (int32 i = 0; i < RuntimeAction.Tasks.Num(); ++i)
 		{
-			Task->Register(GetOwner());
-			bCanEverTick = Task->CanEverTick();
+			UScriptableTask* TemplateTask = RuntimeAction.Tasks[i];
+			if (TemplateTask)
+			{
+				UScriptableTask* NewTaskInstance = DuplicateObject<UScriptableTask>(TemplateTask, this);
+				RuntimeAction.Tasks[i] = NewTaskInstance;
+			}
 		}
+
+		RuntimeAction.Register(GetOwner());
 	}
 }
 
-void UScriptableTask_RunAsset::ClearTaskInstance()
+void UScriptableTask_RunAsset::TeardownRuntimeAction()
 {
-	if (IsValid(Task))
+	if (RuntimeAction.IsRunning())
 	{
-		Task->Unregister();
-		Task = nullptr;
+		RuntimeAction.Finish();
 	}
-	bCanEverTick = false;
+
+	RuntimeAction.Unregister();
+
+	// Explicitly empty tasks to drop references to the instanced objects
+	RuntimeAction.Tasks.Empty();
 }
 
 UE_ENABLE_OPTIMIZATION

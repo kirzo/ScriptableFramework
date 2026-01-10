@@ -909,11 +909,11 @@ void FScriptableObjectCustomization::OnUseSelected()
 			}
 		}
 		// 2. Check for Task/Condition Asset (Wrappers)
-		static const FName TaskAsset(TEXT("ScriptableTaskAsset"));
+		static const FName ActionAsset(TEXT("ScriptableActionAsset"));
 		static const FName CondAsset(TEXT("ScriptableConditionAsset"));
 		const FName AssetName = AssetData.AssetClassPath.GetAssetName();
 
-		if (AssetName == TaskAsset || AssetName == CondAsset)
+		if (AssetName == ActionAsset || AssetName == CondAsset)
 		{
 			OnAssetPicked(AssetData);
 			return;
@@ -946,7 +946,7 @@ void FScriptableObjectCustomization::SetScriptableObjectType(const UClass* NewCl
 void FScriptableObjectCustomization::OnAssetPicked(const FAssetData& AssetData)
 {
 	UClass* WrapperClass = nullptr;
-	if (AssetData.AssetClassPath.GetAssetName() == "ScriptableTaskAsset")
+	if (AssetData.AssetClassPath.GetAssetName() == "ScriptableActionAsset")
 	{
 		WrapperClass = FindObject<UClass>(nullptr, TEXT("/Script/ScriptableFramework.ScriptableTask_RunAsset"));
 	}

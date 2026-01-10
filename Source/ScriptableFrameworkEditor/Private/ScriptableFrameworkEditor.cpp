@@ -8,7 +8,7 @@
 #include "AssetTools/AssetTypeActions_ScriptableObjectBase.h"
 
 #include "ScriptableTasks/ScriptableTask.h"
-#include "ScriptableTasks/ScriptableTaskAsset.h"
+#include "ScriptableTasks/ScriptableActionAsset.h"
 #include "ScriptableTasks/ScriptableAction.h"
 #include "ScriptableConditions/ScriptableCondition.h"
 #include "ScriptableConditions/ScriptableConditionAsset.h"
@@ -88,7 +88,7 @@ void FScriptableFrameworkEditorModule::RegisterPropertyLayout(FPropertyEditorMod
 
 void FScriptableFrameworkEditorModule::RegisterAssetTools()
 {
-	RegisterAssetTypeAction<UScriptableTaskAsset>(INVTEXT("Scriptable Task"), FScriptableFrameworkEditorStyle::ScriptableTaskColor);
+	RegisterAssetTypeAction<UScriptableActionAsset>(INVTEXT("Scriptable Action"), FScriptableFrameworkEditorStyle::ScriptableTaskColor);
 	RegisterAssetTypeAction<UScriptableConditionAsset>(INVTEXT("Scriptable Condition"), FScriptableFrameworkEditorStyle::ScriptableConditionColor);
 }
 

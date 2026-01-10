@@ -44,8 +44,8 @@ FScriptableFrameworkEditorStyle::FScriptableFrameworkEditorStyle()
 	// Scriptable Framework assets
 	SetContentRoot(IPluginManager::Get().FindPlugin("ScriptableFramework")->GetBaseDir() / TEXT("Resources"));
 
-	Set("ClassIcon.ScriptableTaskAsset", new IMAGE_BRUSH(TEXT("ScriptableTask_16x"), Icon16));
-	Set("ClassThumbnail.ScriptableTaskAsset", new IMAGE_BRUSH(TEXT("ScriptableTask_64x"), Icon64));
+	Set("ClassIcon.ScriptableActionAsset", new IMAGE_BRUSH(TEXT("ScriptableTask_16x"), Icon16));
+	Set("ClassThumbnail.ScriptableActionAsset", new IMAGE_BRUSH(TEXT("ScriptableTask_64x"), Icon64));
 
 	Set("ClassIcon.ScriptableConditionAsset", new IMAGE_BRUSH(TEXT("ScriptableCondition_16x"), Icon16));
 	Set("ClassThumbnail.ScriptableConditionAsset", new IMAGE_BRUSH(TEXT("ScriptableCondition_64x"), Icon64));

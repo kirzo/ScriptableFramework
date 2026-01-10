@@ -12,7 +12,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 
 #include "ScriptableTasks/ScriptableTask.h"
-#include "ScriptableTasks/ScriptableTaskAsset.h"
+#include "ScriptableTasks/ScriptableActionAsset.h"
 #include "ScriptableConditions/ScriptableCondition.h"
 #include "ScriptableConditions/ScriptableConditionAsset.h"
 
@@ -416,7 +416,7 @@ void SScriptableTypePicker::CacheTypes(const UScriptStruct* BaseScriptStruct, co
 
 	if (BaseClass && BaseClass->IsChildOf(UScriptableTask::StaticClass()))
 	{
-		AssetClassToSearch = UScriptableTaskAsset::StaticClass();
+		AssetClassToSearch = UScriptableActionAsset::StaticClass();
 	}
 	else if (BaseClass && BaseClass->IsChildOf(UScriptableCondition::StaticClass()))
 	{
@@ -473,9 +473,9 @@ void SScriptableTypePicker::CacheTypes(const UScriptStruct* BaseScriptStruct, co
 
 			FName IconName = NAME_None;
 
-			if (AssetClassToSearch->IsChildOf(UScriptableTaskAsset::StaticClass()))
+			if (AssetClassToSearch->IsChildOf(UScriptableActionAsset::StaticClass()))
 			{
-				IconName = "ClassIcon.ScriptableTaskAsset";
+				IconName = "ClassIcon.ScriptableActionAsset";
 			}
 			else if (AssetClassToSearch->IsChildOf(UScriptableConditionAsset::StaticClass()))
 			{
