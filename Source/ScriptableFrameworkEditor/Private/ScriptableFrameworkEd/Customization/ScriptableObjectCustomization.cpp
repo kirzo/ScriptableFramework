@@ -514,45 +514,91 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 	PropertyHandle = InPropertyHandle;
 	PropertyUtilities = CustomizationUtils.GetPropertyUtilities();
 
-	// 1. Get the Actual Object
+	// 1. Init Data
 	UObject* Object = nullptr;
 	PropertyHandle->GetValue(Object);
 	UScriptableObject* ScriptableObj = Cast<UScriptableObject>(Object);
 	ScriptableObject = ScriptableObj; // Cache weak pointer
 
-	// 2. Prepare Visual Data
-	const FSlateBrush* IconBrush = nullptr;
-	FText NodeTitle = FText::GetEmpty();
-	FText Description = FText::GetEmpty();
-
 	if (ScriptableObj)
 	{
-		//IconBrush = FSlateIconFinder::FindIconBrushForClass(ScriptableObj->GetClass());
-		Description = ScriptableObj->GetClass()->GetToolTipText();
+		NodeDescription = ScriptableObj->GetClass()->GetToolTipText();
 		NodeTitle = GetDisplayTitle(ScriptableObj);
-
-		// If it's a wrapper, update icon to match the inner asset if possible
-		if (IsWrapperClass(ScriptableObj->GetClass()))
-		{
-			if (UObject* InnerAsset = GetInnerAsset(ScriptableObj))
-			{
-				//IconBrush = FSlateIconFinder::FindIconBrushForClass(InnerAsset->GetClass());
-			}
-		}
 	}
 	else
 	{
 		NodeTitle = FText::FromString(TEXT("None"));
 	}
 
-	// 3. Construct Buttons
-	TSharedPtr<SHorizontalBox> RightSideButtons = SNew(SHorizontalBox);
+	// 2. Setup Reset Logic
+	if (ScriptableObj)
+	{
+		HeaderRow.OverrideResetToDefault(FResetToDefaultOverride::Create(
+			FIsResetToDefaultVisible::CreateSP(this, &FScriptableObjectCustomization::IsResetToDefaultVisible),
+			FResetToDefaultHandler::CreateSP(this, &FScriptableObjectCustomization::OnResetToDefault)
+		));
+	}
+
+	// 3. Build Row using Virtual methods
+	HeaderRow
+		.NameContent()
+		[
+			GetHeaderNameContent().ToSharedRef()
+		]
+		.ValueContent()
+		[
+			GetHeaderValueContent().ToSharedRef()
+		]
+		.ExtensionContent()
+		[
+			GetHeaderExtensionContent().ToSharedRef()
+		];
+}
+
+TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderNameContent()
+{
+	TSharedPtr<SHorizontalBox> NameBox = SNew(SHorizontalBox);
+
+	// Checkbox
+	NameBox->AddSlot()
+		.AutoWidth().Padding(0, 0, 4, 0).VAlign(VAlign_Center)
+		[
+			SNew(SCheckBox)
+				.Visibility(ScriptableObject.IsValid() ? EVisibility::Visible : EVisibility::Collapsed)
+				.IsChecked(this, &FScriptableObjectCustomization::OnGetEnabled)
+				.OnCheckStateChanged(this, &FScriptableObjectCustomization::OnSetEnabled)
+				.ToolTipText(LOCTEXT("Toggle", "Enable/Disable"))
+		];
+
+	// Title
+	NameBox->AddSlot()
+		.FillWidth(1.0f).VAlign(VAlign_Center)
+		[
+			SNew(STextBlock)
+				.Text(NodeTitle)
+				.Font(IDetailLayoutBuilder::GetDetailFontBold())
+				.ToolTipText(NodeDescription)
+				.ColorAndOpacity(ScriptableObject.IsValid() ? FSlateColor::UseForeground() : FSlateColor::UseSubduedForeground())
+		];
+
+	return NameBox;
+}
+
+TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderValueContent()
+{
+	return SNew(SHorizontalBox);
+}
+
+TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderExtensionContent()
+{
+	TSharedPtr<SHorizontalBox> ExtensionBox = SNew(SHorizontalBox);
+	UScriptableObject* ScriptableObj = ScriptableObject.Get();
 
 	FName ClassCategory; FName PropCategory;
 	ScriptableFrameworkEditor::GetScriptableCategory(GetBaseClass(), ClassCategory, PropCategory);
 
-	// Picker (Refresh/Add)
-	RightSideButtons->AddSlot()
+	// Picker
+	ExtensionBox->AddSlot()
 		.AutoWidth().VAlign(VAlign_Center)
 		[
 			SNew(SScriptableTypePicker)
@@ -573,39 +619,36 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 		];
 
 	// Use Selected
-	RightSideButtons->AddSlot()
+	ExtensionBox->AddSlot()
 		.AutoWidth().VAlign(VAlign_Center)
 		[
 			PropertyCustomizationHelpers::MakeUseSelectedButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnUseSelected))
 		];
 
-	// Clear
 	if (ScriptableObj)
 	{
-		RightSideButtons->AddSlot()
+		// Clear
+		ExtensionBox->AddSlot()
 			.AutoWidth().VAlign(VAlign_Center)
 			[
 				PropertyCustomizationHelpers::MakeClearButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnClear))
 			];
-	}
 
-	// Browse / Edit (Wrappers or BPs)
-	if (ScriptableObj)
-	{
+		// Browse / Edit
 		const bool bIsBlueprint = ScriptableObj->GetClass()->HasAnyClassFlags(CLASS_CompiledFromBlueprint);
 		const bool bIsWrapper = IsWrapperClass(ScriptableObj->GetClass());
 
 		if (bIsBlueprint || bIsWrapper)
 		{
 			FText BrowseTxt = FText::Format(LOCTEXT("Browse", "Browse to '{0}'"), NodeTitle);
-			RightSideButtons->AddSlot()
+			ExtensionBox->AddSlot()
 				.AutoWidth().Padding(2, 0).VAlign(VAlign_Center)
 				[
 					PropertyCustomizationHelpers::MakeBrowseButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnBrowse), BrowseTxt)
 				];
 
 			FText EditTxt = FText::Format(LOCTEXT("Edit", "Edit '{0}'"), NodeTitle);
-			RightSideButtons->AddSlot()
+			ExtensionBox->AddSlot()
 				.AutoWidth().Padding(2, 0).VAlign(VAlign_Center)
 				[
 					PropertyCustomizationHelpers::MakeEditButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnEdit), EditTxt)
@@ -613,59 +656,17 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 		}
 	}
 
-	// Delete (Only if inside Array)
+	// Delete (if in Array)
 	if (PropertyHandle->GetIndexInArray() != INDEX_NONE)
 	{
-		RightSideButtons->AddSlot()
+		ExtensionBox->AddSlot()
 			.AutoWidth().Padding(2, 0).VAlign(VAlign_Center)
 			[
 				PropertyCustomizationHelpers::MakeDeleteButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnDelete), LOCTEXT("Delete", "Remove from list"))
 			];
 	}
 
-	// 4. Setup Reset Logic (Re-instantiate)
-	if (ScriptableObj)
-	{
-		HeaderRow.OverrideResetToDefault(FResetToDefaultOverride::Create(
-			FIsResetToDefaultVisible::CreateSP(this, &FScriptableObjectCustomization::IsResetToDefaultVisible),
-			FResetToDefaultHandler::CreateSP(this, &FScriptableObjectCustomization::OnResetToDefault)
-		));
-	}
-
-	// 5. Finalize Header Row
-	HeaderRow
-		.NameContent()
-		[
-			SNew(SHorizontalBox)
-				// Checkbox (Only if object valid)
-				+ SHorizontalBox::Slot()
-				.AutoWidth().Padding(0, 0, 4, 0).VAlign(VAlign_Center)
-				[
-					SNew(SCheckBox)
-						.Visibility(ScriptableObj ? EVisibility::Visible : EVisibility::Collapsed)
-						.IsChecked(this, &FScriptableObjectCustomization::OnGetEnabled)
-						.OnCheckStateChanged(this, &FScriptableObjectCustomization::OnSetEnabled)
-						.ToolTipText(LOCTEXT("Toggle", "Enable/Disable"))
-				]
-			// Title
-			+ SHorizontalBox::Slot()
-				.FillWidth(1.0f).VAlign(VAlign_Center)
-				[
-					SNew(STextBlock)
-						.Text(NodeTitle)
-						.Font(IDetailLayoutBuilder::GetDetailFontBold())
-						.ToolTipText(Description)
-						.ColorAndOpacity(ScriptableObj ? FSlateColor::UseForeground() : FSlateColor::UseSubduedForeground())
-				]
-		]
-	.ValueContent()
-		[
-			SNullWidget::NullWidget
-		]
-		.ExtensionContent()
-		[
-			RightSideButtons.ToSharedRef()
-		];
+	return ExtensionBox;
 }
 
 void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandle> InPropertyHandle, IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& CustomizationUtils)

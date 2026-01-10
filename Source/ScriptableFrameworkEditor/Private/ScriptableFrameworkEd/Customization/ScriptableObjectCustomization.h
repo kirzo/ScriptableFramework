@@ -14,8 +14,9 @@ class IDetailPropertyRow;
 struct FAssetData;
 
 /**
- * Customizes the UI for any property of type UScriptableObject* (EditInlineNew).
- * Handles the "StateTree-like" look: Checkbox, Icon, Title, Action Buttons, and Property Bindings.
+ * Base customization for UScriptableObject.
+ * Handles the common "Header" (Checkbox, Icon, Title, Action Buttons).
+ * Derived classes can inject custom widgets into Name, Value, or Extension slots.
  */
 class FScriptableObjectCustomization : public IPropertyTypeCustomization
 {
@@ -26,7 +27,13 @@ public:
 	virtual void CustomizeHeader(TSharedRef<IPropertyHandle> PropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
 	virtual void CustomizeChildren(TSharedRef<IPropertyHandle> PropertyHandle, IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
 
-private:
+protected:
+	// --- Overridable Extension Points ---
+
+	virtual TSharedPtr<SHorizontalBox> GetHeaderNameContent();
+	virtual TSharedPtr<SHorizontalBox> GetHeaderValueContent();
+	virtual TSharedPtr<SHorizontalBox> GetHeaderExtensionContent();
+
 	// --- Internal Logic Helpers ---
 
 	/** Returns the base class allowed for this property (e.g., UScriptableTask, UScriptableCondition, or UScriptableObject). */
@@ -78,7 +85,7 @@ private:
 	/** Callback when a type is picked from the SScriptableTypePicker. */
 	void OnTypePicked(const UStruct* InStruct, const FAssetData& AssetData);
 
-private:
+protected:
 	/** Handle to the property being customized (the Object pointer). */
 	TSharedPtr<IPropertyHandle> PropertyHandle;
 
@@ -87,4 +94,8 @@ private:
 
 	/** Weak pointer to the actual object instance (if valid). */
 	TWeakObjectPtr<UScriptableObject> ScriptableObject;
+
+	// Cached data for UI generation
+	FText NodeTitle;
+	FText NodeDescription;
 };

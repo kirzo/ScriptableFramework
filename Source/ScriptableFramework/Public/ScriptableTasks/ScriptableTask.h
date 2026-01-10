@@ -26,6 +26,25 @@ struct SCRIPTABLEFRAMEWORK_API FScriptableTaskEvents
 	FScriptableTaskEventSignature OnTaskFinish;
 };
 
+/** Flow control settings for the task. */
+USTRUCT(BlueprintType)
+struct FScriptableTaskControl
+{
+	GENERATED_BODY()
+
+	/** If true, the task will loop automatically upon finishing. */
+	UPROPERTY(EditAnywhere, Category = "Control")
+	uint8 bLoop : 1 = false;
+
+	/** Number of loops. 0 means infinite. */
+	UPROPERTY(EditAnywhere, Category = "Control", meta = (ClampMin = 0))
+	int32 LoopCount = 0;
+
+	/** If true, this task will execute only once during its lifecycle. */
+	UPROPERTY(EditAnywhere, Category = "Control")
+	uint8 bDoOnce : 1 = false;
+};
+
 UCLASS(Abstract, DefaultToInstanced, EditInlineNew, Blueprintable, BlueprintType, HideCategories = (Hidden), CollapseCategories)
 class SCRIPTABLEFRAMEWORK_API UScriptableTask : public UScriptableObject
 {
@@ -34,6 +53,18 @@ class SCRIPTABLEFRAMEWORK_API UScriptableTask : public UScriptableObject
 private:
 	/** Current status of the task. */
 	EScriptableTaskStatus Status = EScriptableTaskStatus::None;
+
+	/** Advanced execution logic (Looping, DoOnce). */
+	UPROPERTY(EditAnywhere, Category = Hidden, meta = (NoBinding))
+	FScriptableTaskControl Control;
+
+	/** Counter for the current loop iteration. */
+	UPROPERTY(Transient)
+	int32 CurrentLoopIndex = 0;
+
+	/** Flag to track if a DoOnce task has already executed. */
+	UPROPERTY(Transient)
+	uint8 bDoOnceFinished : 1 = false;
 
 public:
 	EScriptableTaskStatus GetStatus() const { return Status; }
@@ -100,7 +131,7 @@ public:
 	static UScriptableTask* RunTask(UObject* Owner, UScriptableTask* Task, FScriptableTaskEvents Events = FScriptableTaskEvents());
 };
 
-UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Random", TaskCategory = "System", BlockSiblingBindings = "true"))
+UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (Hidden))
 class UScriptableTask_Random final : public UScriptableTask
 {
 	GENERATED_BODY()
@@ -124,73 +155,4 @@ private:
 
 	UFUNCTION()
 	void OnSubTaskFinish(UScriptableTask* Task);
-};
-
-UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Loop", TaskCategory = "System"))
-class UScriptableTask_Loop final : public UScriptableTask
-{
-	GENERATED_BODY()
-
-public:
-	UPROPERTY(EditAnywhere, Category = ScriptableTask, meta = (ClampMin = 0))
-	int32 NumLoops = 1;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Instanced, Category = ScriptableTask, meta = (ShowOnlyInnerProperties))
-	UScriptableTask* Task;
-
-	virtual void OnRegister() override;
-	virtual void OnUnregister() override;
-	virtual void ResetTask() override;
-	virtual void BeginTask() override;
-	virtual void FinishTask() override;
-	virtual void Tick(float DeltaTime) override;
-
-private:
-	int32 LoopCount = 0;
-
-	UFUNCTION()
-	void OnSubTaskFinish(UScriptableTask* SubTask);
-};
-
-UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Do Once", TaskCategory = "System"))
-class UScriptableTask_DoOnce final : public UScriptableTask
-{
-	GENERATED_BODY()
-
-public:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Instanced, Category = ScriptableTask, meta = (ShowOnlyInnerProperties))
-	UScriptableTask* Task;
-
-	virtual void OnRegister() override;
-	virtual void OnUnregister() override;
-	virtual void BeginTask() override;
-	virtual void FinishTask() override;
-	virtual void Tick(float DeltaTime) override;
-
-private:
-	UFUNCTION()
-	void OnSubTaskFinish(UScriptableTask* SubTask);
-};
-
-UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Condition", TaskCategory = "System", BlockSiblingBindings = "true"))
-class UScriptableTask_Condition final : public UScriptableTask
-{
-	GENERATED_BODY()
-
-public:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Instanced, Category = ScriptableTask, meta = (ShowOnlyInnerProperties))
-	UScriptableCondition* Condition;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Instanced, Category = ScriptableTask, meta = (ShowOnlyInnerProperties))
-	UScriptableTask* Task;
-
-	virtual void OnRegister() override;
-	virtual void OnUnregister() override;
-	virtual void BeginTask() override;
-	virtual void FinishTask() override;
-	virtual void Tick(float DeltaTime) override;
-
-private:
-	UFUNCTION()
-	void OnSubTaskFinish(UScriptableTask* SubTask);
 };

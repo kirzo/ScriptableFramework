@@ -1,7 +1,7 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableTasks/ScriptableTask.h"
-#include "ScriptableTasks/ScriptableTaskAsset.h"
+#include "ScriptableTasks/ScriptableActionAsset.h"
 #include "ScriptableConditions/ScriptableCondition.h"
 
 #include "Algo/AnyOf.h"
@@ -25,6 +25,7 @@ void UScriptableTask::Reset()
 	if (HasFinished())
 	{
 		Status = EScriptableTaskStatus::None;
+		CurrentLoopIndex = 0;
 		ResetTask();
 	}
 }
@@ -32,13 +33,26 @@ void UScriptableTask::Reset()
 void UScriptableTask::Begin()
 {
 	check(bRegistered);
+
+	if (Control.bDoOnce && bDoOnceFinished)
+	{
+		// We treat it as if it started and immediately finished successfully.
+		// This ensures the Action sequence proceeds to the next task.
+		OnTaskFinishNative.Broadcast(this);
+		OnTaskFinish.Broadcast(this);
+		return;
+	}
+
 	check(Status != EScriptableTaskStatus::Begun);
+
+	CurrentLoopIndex = 0;
 
 	ResolveBindings();
 
 	Status = EScriptableTaskStatus::Begun;
 	RegisterTickFunctions(true);
 	BeginTask();
+
 	OnTaskBeginNative.Broadcast(this);
 	OnTaskBegin.Broadcast(this);
 }
@@ -47,9 +61,31 @@ void UScriptableTask::Finish()
 {
 	if (HasBegun() && !HasFinished() && IsEnabled())
 	{
+		if (Control.bLoop)
+		{
+			CurrentLoopIndex++;
+
+			// 0 means Infinite, otherwise check strictly against count
+			if (Control.LoopCount <= 0 || CurrentLoopIndex < Control.LoopCount)
+			{
+				// Restart the task logic without changing Status or broadcasting Finish.
+				// Note: We don't call Begin() to avoid resetting CurrentLoopIndex.
+				// We call the virtual implementation directly.
+				BeginTask();
+				return; // Task is NOT finished yet.
+			}
+		}
+
+		// Mark as finished for future runs.
+		if (Control.bDoOnce)
+		{
+			bDoOnceFinished = true;
+		}
+
 		Status = EScriptableTaskStatus::Finished;
 		RegisterTickFunctions(false);
 		FinishTask();
+
 		OnTaskFinishNative.Broadcast(this);
 		OnTaskFinish.Broadcast(this);
 	}
@@ -174,209 +210,6 @@ void UScriptableTask_Random::SelectTask()
 void UScriptableTask_Random::OnSubTaskFinish(UScriptableTask* Task)
 {
 	Task->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_Random::OnSubTaskFinish);
-	Finish();
-}
-
-void UScriptableTask_Loop::OnRegister()
-{
-	Super::OnRegister();
-
-	if (IsValid(Task) && Task->IsEnabled())
-	{
-		Task->Register(GetOwner());
-		bCanEverTick = Task->CanEverTick();
-	}
-}
-
-void UScriptableTask_Loop::OnUnregister()
-{
-	Super::OnUnregister();
-
-	if (IsValid(Task))
-	{
-		Task->Unregister();
-		Task = nullptr;
-	}
-}
-
-void UScriptableTask_Loop::ResetTask()
-{
-	LoopCount = 0;
-
-	if (IsValid(Task))
-	{
-		Task->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_Loop::OnSubTaskFinish);
-		Task->Reset();
-	}
-}
-
-void UScriptableTask_Loop::BeginTask()
-{
-	if (IsValid(Task) && Task->IsEnabled())
-	{
-		Task->OnTaskFinish.AddDynamic(this, &UScriptableTask_Loop::OnSubTaskFinish);
-		Task->Begin();
-	}
-	else
-	{
-		Finish();
-	}
-}
-
-void UScriptableTask_Loop::FinishTask()
-{
-	if (IsValid(Task))
-	{
-		Task->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_Loop::OnSubTaskFinish);
-		Task->Finish();
-	}
-}
-
-void UScriptableTask_Loop::Tick(float DeltaTime)
-{
-	if (Task->CanEverTick())
-	{
-		Task->Tick(DeltaTime);
-	}
-}
-
-void UScriptableTask_Loop::OnSubTaskFinish(UScriptableTask* SubTask)
-{
-	LoopCount++;
-
-	if (NumLoops <= 0 || LoopCount < NumLoops)
-	{
-		SubTask->Reset();
-		SubTask->Begin();
-	}
-	else
-	{
-		SubTask->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_Loop::OnSubTaskFinish);
-		Finish();
-	}
-}
-
-void UScriptableTask_DoOnce::OnRegister()
-{
-	Super::OnRegister();
-
-	if (IsValid(Task) && Task->IsEnabled())
-	{
-		Task->Register(GetOwner());
-		bCanEverTick = Task->CanEverTick();
-	}
-}
-
-void UScriptableTask_DoOnce::OnUnregister()
-{
-	Super::OnUnregister();
-
-	if (IsValid(Task))
-	{
-		Task->Unregister();
-		Task = nullptr;
-	}
-}
-
-void UScriptableTask_DoOnce::BeginTask()
-{
-	if (IsValid(Task) && Task->IsEnabled())
-	{
-		Task->OnTaskFinish.AddDynamic(this, &UScriptableTask_DoOnce::OnSubTaskFinish);
-		Task->Begin();
-	}
-	else
-	{
-		Finish();
-	}
-}
-
-void UScriptableTask_DoOnce::FinishTask()
-{
-	if (IsValid(Task))
-	{
-		Task->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_DoOnce::OnSubTaskFinish);
-		Task->Finish();
-		Task->Unregister();
-		Task = nullptr;
-
-		bCanEverTick = false;
-	}
-}
-
-void UScriptableTask_DoOnce::Tick(float DeltaTime)
-{
-	if (Task->CanEverTick())
-	{
-		Task->Tick(DeltaTime);
-	}
-}
-
-void UScriptableTask_DoOnce::OnSubTaskFinish(UScriptableTask* SubTask)
-{
-	SubTask->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_DoOnce::OnSubTaskFinish);
-	Finish();
-}
-
-void UScriptableTask_Condition::OnRegister()
-{
-	Super::OnRegister();
-
-	if (IsValid(Task) && Task->IsEnabled())
-	{
-		Task->Register(GetOwner());
-		bCanEverTick = Task->CanEverTick();
-	}
-}
-
-void UScriptableTask_Condition::OnUnregister()
-{
-	Super::OnUnregister();
-
-	if (IsValid(Task))
-	{
-		Task->Unregister();
-		Task = nullptr;
-	}
-}
-
-void UScriptableTask_Condition::BeginTask()
-{
-	if (IsValid(Task) && Task->IsEnabled() && UScriptableCondition::EvaluateCondition(GetOwner(), Condition))
-	{
-		Task->OnTaskFinish.AddDynamic(this, &UScriptableTask_Condition::OnSubTaskFinish);
-		Task->Begin();
-	}
-	else
-	{
-		Finish();
-	}
-}
-
-void UScriptableTask_Condition::FinishTask()
-{
-	if (IsValid(Task))
-	{
-		Task->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_Condition::OnSubTaskFinish);
-		Task->Finish();
-		Task->Unregister();
-		Task = nullptr;
-
-		bCanEverTick = false;
-	}
-}
-
-void UScriptableTask_Condition::Tick(float DeltaTime)
-{
-	if (Task->CanEverTick())
-	{
-		Task->Tick(DeltaTime);
-	}
-}
-
-void UScriptableTask_Condition::OnSubTaskFinish(UScriptableTask* SubTask)
-{
-	SubTask->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_Condition::OnSubTaskFinish);
 	Finish();
 }
 

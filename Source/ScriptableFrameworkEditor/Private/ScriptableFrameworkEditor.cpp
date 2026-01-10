@@ -13,7 +13,7 @@
 #include "ScriptableConditions/ScriptableCondition.h"
 #include "ScriptableConditions/ScriptableConditionAsset.h"
 
-#include "ScriptableFrameworkEd/Customization/ScriptableObjectCustomization.h"
+#include "ScriptableFrameworkEd/Customization/ScriptableTaskCustomization.h"
 #include "ScriptableFrameworkEd/Customization/ScriptableConditionCustomization.h"
 #include "ScriptableFrameworkEd/Customization/ScriptableActionCustomization.h"
 
@@ -107,7 +107,7 @@ void FScriptableFrameworkEditorModule::UnregisterAssetTools()
 void FScriptableFrameworkEditorModule::RegisterLayouts()
 {
 	FPropertyEditorModule& PropertyEditorModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
-	RegisterPropertyLayout<FScriptableObjectCustomization>(PropertyEditorModule, UScriptableTask::StaticClass()->GetFName());
+	RegisterPropertyLayout<FScriptableTaskCustomization>(PropertyEditorModule, UScriptableTask::StaticClass()->GetFName());
 	RegisterPropertyLayout<FScriptableConditionCustomization>(PropertyEditorModule, UScriptableCondition::StaticClass()->GetFName());
 	RegisterPropertyLayout<FScriptableActionCustomization>(PropertyEditorModule, FScriptableAction::StaticStruct()->GetFName());
 }
