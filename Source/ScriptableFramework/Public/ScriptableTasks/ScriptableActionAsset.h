@@ -3,14 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Engine/DataAsset.h"
+#include "ScriptableObjectAsset.h"
 #include "ScriptableAction.h"
 #include "ScriptableTask.h"
 #include "ScriptableActionAsset.generated.h"
 
-/** An asset that defines a reusable Action (Execution flow, Data Context, and Tasks). */
+/** An asset that defines a reusable Action. */
 UCLASS(BlueprintType, Const)
-class SCRIPTABLEFRAMEWORK_API UScriptableActionAsset : public UDataAsset
+class SCRIPTABLEFRAMEWORK_API UScriptableActionAsset : public UScriptableObjectAsset
 {
 	GENERATED_BODY()
 

@@ -115,7 +115,9 @@ private:
 
 	static void SortNodeTypesFunctionItemsRecursive(TArray<TSharedPtr<FScriptableTypeItem>>& Items);
 	static TSharedPtr<FScriptableTypeItem> FindOrCreateItemForCategory(TArray<TSharedPtr<FScriptableTypeItem>>& Items, TArrayView<FString> CategoryPath);
+	FText GetNodeCategory(const UStruct* Struct);
 	void AddNode(const UStruct* Struct);
+	void AddNode(const FAssetData& AssetData);
 	bool MatchesFilter(const UStruct* Struct);
 	void CacheTypes(const UScriptStruct* BaseScriptStruct, const UClass* BaseClass);
 
