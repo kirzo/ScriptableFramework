@@ -126,33 +126,4 @@ protected:
 	*/
 	UFUNCTION(BlueprintImplementableEvent, meta = (DisplayName = "Finish Task"))
 	void ReceiveFinishTask();
-
-public:
-	static UScriptableTask* RunTask(UObject* Owner, UScriptableTask* Task, FScriptableTaskEvents Events = FScriptableTaskEvents());
-};
-
-UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (Hidden))
-class UScriptableTask_Random final : public UScriptableTask
-{
-	GENERATED_BODY()
-
-public:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Instanced, Category = ScriptableTask, meta = (ShowOnlyInnerProperties))
-	TArray<UScriptableTask*> Tasks;
-
-	virtual void OnRegister() override;
-	virtual void OnUnregister() override;
-	virtual void ResetTask() override;
-	virtual void BeginTask() override;
-	virtual void FinishTask() override;
-	virtual void Tick(float DeltaTime) override;
-
-private:
-	UPROPERTY(Transient)
-	UScriptableTask* SelectedTask = nullptr;
-
-	void SelectTask();
-
-	UFUNCTION()
-	void OnSubTaskFinish(UScriptableTask* Task);
 };
