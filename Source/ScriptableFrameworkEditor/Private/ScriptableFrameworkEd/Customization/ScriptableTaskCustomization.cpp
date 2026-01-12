@@ -17,7 +17,10 @@ TSharedPtr<IPropertyHandle> FScriptableTaskCustomization::GetControlProperty(FNa
 	if (PropertyHandle.IsValid())
 	{
 		// Access: Task -> Control -> Property
-		return PropertyHandle->GetChildHandle("Control")->GetChildHandle(PropertyName);
+		if (TSharedPtr<IPropertyHandle> ControlProp = PropertyHandle->GetChildHandle("Control"))
+		{
+			return ControlProp->GetChildHandle(PropertyName);
+		}
 	}
 	return nullptr;
 }
