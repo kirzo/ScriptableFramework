@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "StructUtils/PropertyBag.h"
+#include "Bindings/ScriptableParameterDef.h"
 #include "ScriptableObjectAsset.generated.h"
 
 /**
@@ -24,9 +24,24 @@ public:
 
 #if WITH_EDITOR
 	virtual void GetAssetRegistryTags(FAssetRegistryTagsContext Context) const override;
+
+	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
+	virtual void PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent) override;
 #endif
 
 	/** Defines the context this asset expects. */
 	UPROPERTY(EditAnywhere, Category = "Config")
-	FInstancedPropertyBag Context;
+	TArray<FScriptableParameterDef> Context;
+
+protected:
+	virtual FInstancedPropertyBag* GetContext() PURE_VIRTUAL(UScriptableObjectAsset::GetContext(), return nullptr;)
+
+#if WITH_EDITOR
+	virtual FName GetContainerName() const PURE_VIRTUAL(UScriptableObjectAsset::GetContainerName(), return NAME_None;)
+#endif
+
+private:
+#if WITH_EDITOR
+	void RefreshContext();
+#endif
 };

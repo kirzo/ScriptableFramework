@@ -16,11 +16,17 @@ class SCRIPTABLEFRAMEWORK_API UScriptableRequirementAsset final : public UScript
 
 public:
 	/** The requirement definition. Holds the Context variables and the list of Conditions. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Action")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Requirement")
 	FScriptableRequirement Requirement;
 
+protected:
+	virtual FInstancedPropertyBag* GetContext() override { return &Requirement.GetContext(); }
+
 #if WITH_EDITOR
-	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
+	virtual FName GetContainerName() const override
+	{
+		return GET_MEMBER_NAME_CHECKED(UScriptableRequirementAsset, Context);
+	}
 #endif
 };
 

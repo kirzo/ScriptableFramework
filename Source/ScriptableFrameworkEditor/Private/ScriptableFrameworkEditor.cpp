@@ -24,6 +24,9 @@
 #include "ScriptableConditions/ScriptableCondition_Group.h"
 #include "ScriptableFrameworkEd/Customization/ScriptableConditionGroupCustomization.h"
 
+#include "Bindings/ScriptableParameterDef.h"
+#include "ScriptableFrameworkEd/Customization/ScriptableParameterDefCustomization.h"
+
 #include "AssetToolsModule.h"
 
 #define LOCTEXT_NAMESPACE "FScriptableFrameworkEditorModule"
@@ -119,6 +122,7 @@ void FScriptableFrameworkEditorModule::RegisterLayouts()
 	RegisterPropertyLayout<FScriptableActionCustomization>(PropertyEditorModule, FScriptableAction::StaticStruct()->GetFName());
 	RegisterPropertyLayout<FScriptableRequirementCustomization>(PropertyEditorModule, FScriptableRequirement::StaticStruct()->GetFName());
 	RegisterPropertyLayout<FScriptableConditionGroupCustomization>(PropertyEditorModule, UScriptableCondition_Group::StaticClass()->GetFName());
+	RegisterPropertyLayout<FScriptableParameterDefCustomization>(PropertyEditorModule, FScriptableParameterDef::StaticStruct()->GetFName());
 }
 
 void FScriptableFrameworkEditorModule::UnregisterLayouts()

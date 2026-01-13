@@ -107,9 +107,9 @@ namespace ScriptableBindingUI
 				{
 					const FBindableStructDesc* SourceDesc = AccessibleStructs.FindByPredicate([&](const FBindableStructDesc& Desc) { return Desc.ID == SourcePath->GetStructID(); });
 
-					bool bIsBindingValid = false;
+					bool bIsPathValid = false;
+					bool bIsTypeCompatible = false;
 
-					// Default name if no valid source is found
 					FString DisplayString = TEXT("Unknown");
 
 					if (SourceDesc)
@@ -119,32 +119,53 @@ namespace ScriptableBindingUI
 						// Create a dummy view (only types) to validate the path
 						FPropertyBindingDataView DummyView(SourceDesc->Struct, nullptr);
 
-						// ResolveIndirections returns false if any path segment does not exist
 						TArray<FPropertyBindingPathIndirection> Indirections;
 						if (SourcePath->ResolveIndirectionsWithValue(DummyView, Indirections))
 						{
-							bIsBindingValid = true;
+							bIsPathValid = true;
+
+							if (Indirections.Num() > 0)
+							{
+								const FProperty* SourceProp = Indirections.Last().GetProperty();
+								const FProperty* TargetProp = PropertyHandle->GetProperty();
+
+								if (ScriptableFrameworkEditor::ArePropertiesCompatible(SourceProp, TargetProp))
+								{
+									bIsTypeCompatible = true;
+								}
+							}
 						}
 					}
 
-					if (!SourcePath->IsPathEmpty())
-					{
-						DisplayString += TEXT(".") + SourcePath->ToString();
-					}
-
-					Text = FText::FromString(DisplayString);
-
-					if (bIsBindingValid)
-					{
-						TooltipText = FText::Format(LOCTEXT("BindingTooltip", "Bound to {0}"), Text);
-						Image = FAppStyle::GetBrush(PropertyIcon);
-						Color = Schema->GetPinTypeColor(PinType);
-					}
-					else
+					if (!SourceDesc || !bIsPathValid)
 					{
 						TooltipText = LOCTEXT("BindingErrorTooltip", "ERROR: The source property is missing.");
 						Image = FAppStyle::GetBrush("Icons.Error");
 						Color = FLinearColor::Red;
+					}
+					else if (!bIsTypeCompatible)
+					{
+						TooltipText = LOCTEXT("BindingTypeMismatch", "ERROR: Type Mismatch (Source type changed).");
+						Image = FAppStyle::GetBrush("Icons.Error");
+						Color = FLinearColor::Red;
+					}
+					else
+					{
+						if (!SourcePath->IsPathEmpty())
+						{
+							DisplayString += TEXT(".") + SourcePath->ToString();
+						}
+
+						Text = FText::FromString(DisplayString);
+						TooltipText = FText::Format(LOCTEXT("BindingTooltip", "Bound to {0}"), Text);
+						Image = FAppStyle::GetBrush(PropertyIcon);
+						Color = Schema->GetPinTypeColor(PinType);
+					}
+
+					if (Text.IsEmpty())
+					{
+						if (!SourcePath->IsPathEmpty()) DisplayString += TEXT(".") + SourcePath->ToString();
+						Text = FText::FromString(DisplayString);
 					}
 				}
 			}
@@ -513,6 +534,12 @@ private:
 // FScriptableObjectCustomization Implementation
 // ------------------------------------------------------------------------------------------------
 
+FScriptableObjectCustomization::~FScriptableObjectCustomization()
+{
+	// Clean up the global delegate
+	FCoreUObjectDelegates::OnObjectPropertyChanged.Remove(OnObjectPropertyChangedHandle);
+}
+
 void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> InPropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils)
 {
 	InitCustomization(InPropertyHandle, CustomizationUtils);
@@ -559,6 +586,9 @@ void FScriptableObjectCustomization::InitCustomization(TSharedRef<IPropertyHandl
 	{
 		NodeTitle = FText::FromString(TEXT("None"));
 	}
+
+	// Subscribe to global editor event
+	OnObjectPropertyChangedHandle = FCoreUObjectDelegates::OnObjectPropertyChanged.AddSP(this, &FScriptableObjectCustomization::OnObjectPropertyChanged);
 }
 
 TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderNameContent()
@@ -954,6 +984,43 @@ void FScriptableObjectCustomization::InstantiateClass(const UClass* NewClass, TF
 		PropertyHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
 
 		if (PropertyUtilities) PropertyUtilities->ForceRefresh();
+	}
+}
+
+void FScriptableObjectCustomization::OnObjectPropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent)
+{
+	// Safety Checks
+	if (!ScriptableObject.IsValid() || !PropertyUtilities.IsValid())
+	{
+		return;
+	}
+
+	// Filter: Only care if the Object that changed is the Asset owning this Action
+	// (ScriptableObject->GetOuter() is the Asset)
+	if (InObject == ScriptableObject->GetOuter())
+	{
+		const FName PropertyName = (InEvent.Property) ? InEvent.Property->GetFName() : NAME_None;
+		const FName MemberName = (InEvent.MemberProperty) ? InEvent.MemberProperty->GetFName() : NAME_None;
+
+		// Filter
+		if (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context))
+		{
+			// This allows PostEditChangeProperty to fully complete (migrating the PropertyBag)
+			// before we try to read it again in the UI.
+			if (GEditor)
+			{
+				GEditor->GetTimerManager()->SetTimerForNextTick(FTimerDelegate::CreateSP(this, &FScriptableObjectCustomization::HandleForceRefresh));
+			}
+		}
+	}
+}
+
+void FScriptableObjectCustomization::HandleForceRefresh()
+{
+	// Check validity again as customization might have been destroyed in the meantime
+	if (PropertyUtilities.IsValid())
+	{
+		PropertyUtilities->ForceRefresh();
 	}
 }
 

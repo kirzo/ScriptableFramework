@@ -21,6 +21,8 @@ struct FAssetData;
 class FScriptableObjectCustomization : public IPropertyTypeCustomization
 {
 public:
+	virtual ~FScriptableObjectCustomization();
+
 	/** IPropertyTypeCustomization interface */
 	virtual void CustomizeHeader(TSharedRef<IPropertyHandle> PropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
 	virtual void CustomizeChildren(TSharedRef<IPropertyHandle> PropertyHandle, IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
@@ -92,6 +94,12 @@ protected:
 	 */
 	void InstantiateClass(const UClass* Class, TFunction<void()> OnInstanceCreated = nullptr);
 
+	/** Callback for the global property changed event. */
+	void OnObjectPropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent);
+
+	/** Safe refresh called on next tick */
+	void HandleForceRefresh();
+
 protected:
 	/** Handle to the property being customized (the Object pointer). */
 	TSharedPtr<IPropertyHandle> PropertyHandle;
@@ -105,4 +113,6 @@ protected:
 	// Cached data for UI generation
 	FText NodeTitle;
 	FText NodeDescription;
+
+	FDelegateHandle OnObjectPropertyChangedHandle;
 };

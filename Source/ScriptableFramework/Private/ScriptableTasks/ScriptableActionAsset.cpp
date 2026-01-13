@@ -7,20 +7,6 @@
 
 UE_DISABLE_OPTIMIZATION
 
-#if WITH_EDITOR
-void UScriptableActionAsset::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
-{
-	Super::PostEditChangeProperty(PropertyChangedEvent);
-
-	const FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
-
-	if (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableActionAsset, Context))
-	{
-		Action.GetContext().MigrateToNewBagInstance(Context);
-	}
-}
-#endif
-
 void UScriptableTask_RunAsset::OnRegister()
 {
 	Super::OnRegister();

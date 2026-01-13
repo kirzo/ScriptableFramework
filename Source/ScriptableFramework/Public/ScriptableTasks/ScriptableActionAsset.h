@@ -19,8 +19,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Action")
 	FScriptableAction Action;
 
+protected:
+	virtual FInstancedPropertyBag* GetContext() override { return &Action.GetContext(); }
+
 #if WITH_EDITOR
-	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
+	virtual FName GetContainerName() const override
+	{
+		return GET_MEMBER_NAME_CHECKED(UScriptableActionAsset, Action);
+	}
 #endif
 };
 
