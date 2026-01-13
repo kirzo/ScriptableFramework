@@ -3,8 +3,8 @@
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "PropertyHandle.h"
 #include "ScriptableObject.h"
+#include "ScriptableContainer.h"
 #include "ScriptableTasks/ScriptableTask.h"
-#include "ScriptableTasks/ScriptableAction.h"
 #include "ScriptableConditions/ScriptableCondition.h"
 #include "ScriptableConditions/ScriptableRequirement.h"
 #include "StructUtils/InstancedStruct.h"
@@ -168,14 +168,14 @@ namespace ScriptableFrameworkEditor
 		return Owner ? Owner->GetBindingID() : FGuid();
 	}
 
-	TSharedPtr<IPropertyHandle> FindParentStructHandle(TSharedPtr<IPropertyHandle> ChildHandle, UScriptStruct* TargetStruct)
+	TSharedPtr<IPropertyHandle> FindContainerStructHandle(TSharedPtr<IPropertyHandle> ChildHandle)
 	{
 		TSharedPtr<IPropertyHandle> Current = ChildHandle;
 		while (Current.IsValid())
 		{
 			if (const FStructProperty* StructProp = CastField<FStructProperty>(Current->GetProperty()))
 			{
-				if (StructProp->Struct == TargetStruct)
+				if (StructProp->Struct && StructProp->Struct->IsChildOf<FScriptableContainer>())
 				{
 					return Current;
 				}
@@ -183,11 +183,6 @@ namespace ScriptableFrameworkEditor
 			Current = Current->GetParentHandle();
 		}
 		return nullptr;
-	}
-
-	TSharedPtr<IPropertyHandle> FindActionStructHandle(TSharedPtr<IPropertyHandle> ChildHandle)
-	{
-		return FindParentStructHandle(ChildHandle, FScriptableAction::StaticStruct());
 	}
 
 	TSharedPtr<IPropertyHandle> FindObjectHandleInHierarchy(TSharedPtr<IPropertyHandle> StartHandle, const UObject* TargetObject)
@@ -242,18 +237,20 @@ namespace ScriptableFrameworkEditor
 		const UScriptableObject* RootObject = TargetObject->GetRoot();
 		if (!RootObject) return;
 
-		// 1. Context (From FScriptableAction via Handle)
-		if (TSharedPtr<IPropertyHandle> ActionHandle = FindActionStructHandle(Handle))
+		// 1. Context (From FScriptableContainer via Handle)
+		if (TSharedPtr<IPropertyHandle> ContainerHandle = FindContainerStructHandle(Handle))
 		{
-			void* ActionData = nullptr;
-			if (ActionHandle->GetValueData(ActionData) == FPropertyAccess::Success && ActionData)
+			void* StructData = nullptr;
+			if (ContainerHandle->GetValueData(StructData) == FPropertyAccess::Success && StructData)
 			{
-				const FScriptableAction* Action = static_cast<const FScriptableAction*>(ActionData);
-				if (Action->Context.IsValid())
+				// Cast seguro porque FindParentStructHandle verificó la herencia
+				const FScriptableContainer* Container = static_cast<const FScriptableContainer*>(StructData);
+
+				if (Container->HasContext())
 				{
 					FBindableStructDesc& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
 					ContextDesc.Name = FName(TEXT("Context"));
-					ContextDesc.Struct = Action->Context.GetPropertyBagStruct();
+					ContextDesc.Struct = Container->Context.GetPropertyBagStruct();
 					ContextDesc.ID = FGuid(); // Context ID is empty/null
 				}
 			}
@@ -325,8 +322,8 @@ namespace ScriptableFrameworkEditor
 						break;
 					}
 				}
-				// If it's the Action Struct (Container), we went too far up. Stop.
-				else if (OwnerStruct == FScriptableAction::StaticStruct())
+				// If it's the Container Struct, we went too far up. Stop.
+				else if (OwnerStruct->IsChildOf<FScriptableContainer>())
 				{
 					break;
 				}

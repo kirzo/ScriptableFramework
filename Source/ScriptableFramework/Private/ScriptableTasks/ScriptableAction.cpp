@@ -15,8 +15,7 @@ FScriptableAction::~FScriptableAction()
 
 void FScriptableAction::Register(UObject* InOwner)
 {
-	Owner = InOwner;
-	BindingSourceMap.Reset(); // Clean slate
+	Super::Register(InOwner);
 
 	// Filter invalid tasks
 	for (int32 i = Tasks.Num() - 1; i >= 0; --i)
@@ -52,8 +51,7 @@ void FScriptableAction::Unregister()
 		}
 	}
 
-	BindingSourceMap.Empty();
-	Owner = nullptr;
+	Super::Unregister();
 }
 
 void FScriptableAction::Reset()
@@ -145,29 +143,6 @@ void FScriptableAction::OnSubTaskFinished(UScriptableTask* Task)
 	else if (Mode == EScriptableActionMode::Sequence)
 	{
 		BeginSubTask(Tasks[CurrentTaskIndex]);
-	}
-}
-
-UScriptableObject* FScriptableAction::FindBindingSource(const FGuid& InID) const
-{
-	if (const TObjectPtr<UScriptableObject>* Found = BindingSourceMap.Find(InID))
-	{
-		return Found->Get();
-	}
-	return nullptr;
-}
-
-void FScriptableAction::AddBindingSource(UScriptableObject* InSource)
-{
-	if (InSource)
-	{
-		InSource->InitRuntimeData(&Context, &BindingSourceMap);
-
-		FGuid ID = InSource->GetBindingID();
-		if (ID.IsValid())
-		{
-			BindingSourceMap.Add(ID, InSource);
-		}
 	}
 }
 

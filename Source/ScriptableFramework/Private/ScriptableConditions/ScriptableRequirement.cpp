@@ -14,8 +14,7 @@ void FScriptableRequirement::Register(UObject* InOwner)
 		return;
 	}
 
-	Owner = InOwner;
-	BindingSourceMap.Reset(); // Clean slate
+	Super::Register(InOwner);
 
 	// Filter invalid conditions
 	for (int32 i = Conditions.Num() - 1; i >= 0; --i)
@@ -58,9 +57,8 @@ void FScriptableRequirement::Unregister()
 		}
 	}
 
-	BindingSourceMap.Empty();
-	Owner = nullptr;
 	bIsRegistered = false;
+	Super::Unregister();
 }
 
 bool FScriptableRequirement::Evaluate() const
@@ -90,29 +88,6 @@ bool FScriptableRequirement::Evaluate() const
 	}
 
 	return bNegate ? !bResult : bResult;
-}
-
-UScriptableObject* FScriptableRequirement::FindBindingSource(const FGuid& InID) const
-{
-	if (const TObjectPtr<UScriptableObject>* Found = BindingSourceMap.Find(InID))
-	{
-		return Found->Get();
-	}
-	return nullptr;
-}
-
-void FScriptableRequirement::AddBindingSource(UScriptableObject* InSource)
-{
-	if (InSource)
-	{
-		InSource->InitRuntimeData(&Context, &BindingSourceMap);
-
-		FGuid ID = InSource->GetBindingID();
-		if (ID.IsValid())
-		{
-			BindingSourceMap.Add(ID, InSource);
-		}
-	}
 }
 
 bool FScriptableRequirement::EvaluateRequirement(UObject* Owner, FScriptableRequirement& Action)
