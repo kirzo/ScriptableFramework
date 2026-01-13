@@ -18,7 +18,22 @@ void FScriptableContainer::AddBindingSource(UScriptableObject* InSource)
 {
 	if (InSource)
 	{
-		InSource->InitRuntimeData(&Context, &BindingSourceMap);
+		const FInstancedPropertyBag* ContextToUse = nullptr;
+
+		// 1. Determine which Context to pass down.
+		// If our local context is valid and has properties, use it (it acts as the top-most scope).
+		if (Context.IsValid() && Context.GetNumPropertiesInBag() > 0)
+		{
+			ContextToUse = &Context;
+		}
+		// Otherwise, try to inherit the context from the Owner (Parent Scope).
+		else if (UScriptableObject* ScriptableOwner = Cast<UScriptableObject>(Owner))
+		{
+			ContextToUse = ScriptableOwner->GetContext();
+		}
+
+		// 2. Inject Data
+		InSource->InitRuntimeData(ContextToUse, &BindingSourceMap);
 
 		FGuid ID = InSource->GetBindingID();
 		if (ID.IsValid())

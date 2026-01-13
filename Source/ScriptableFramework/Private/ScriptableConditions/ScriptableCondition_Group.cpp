@@ -21,7 +21,7 @@ void UScriptableCondition_Group::OnRegister()
 
 	// Initializes the Requirement's internal map 
 	// and injects THIS Group's Context into its children.
-	Requirement.Register(GetOwner());
+	Requirement.Register(this);
 }
 
 void UScriptableCondition_Group::OnUnregister()

@@ -237,36 +237,50 @@ namespace ScriptableFrameworkEditor
 		const UScriptableObject* RootObject = TargetObject->GetRoot();
 		if (!RootObject) return;
 
-		// 1. Context (From FScriptableContainer via Handle)
-		if (TSharedPtr<IPropertyHandle> ContainerHandle = FindContainerStructHandle(Handle))
+		// 1. Context Hierarchy (Single Effective Scope)
+		// We walk up the hierarchy to find the closest valid Context.
+		// If a container (like a Group Requirement) has no variables, we skip it and keep looking up.
+
+		TSharedPtr<IPropertyHandle> CurrentSearchHandle = Handle;
+		bool bFoundContext = false;
+
+		while (TSharedPtr<IPropertyHandle> ContainerHandle = FindContainerStructHandle(CurrentSearchHandle))
 		{
 			void* StructData = nullptr;
 			if (ContainerHandle->GetValueData(StructData) == FPropertyAccess::Success && StructData)
 			{
-				// Cast seguro porque FindParentStructHandle verificó la herencia
 				const FScriptableContainer* Container = static_cast<const FScriptableContainer*>(StructData);
 
-				if (Container->HasContext())
+				// Only consider this context if it actually has properties defined.
+				if (Container->HasContext() && Container->Context.GetNumPropertiesInBag() > 0)
 				{
 					FBindableStructDesc& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
-					ContextDesc.Name = FName(TEXT("Context"));
+					ContextDesc.Name = FName(TEXT("Context")); // Always named "Context" as it's the only one visible
 					ContextDesc.Struct = Container->Context.GetPropertyBagStruct();
-					ContextDesc.ID = FGuid(); // Context ID is empty/null
+					ContextDesc.ID = FGuid();
+
+					bFoundContext = true;
+					break; // Stop searching. We only expose the most relevant (local) context.
 				}
 			}
+
+			// Move search up past this container
+			CurrentSearchHandle = ContainerHandle->GetParentHandle();
 		}
 
+		// -------------------------------------------------------------------------------
+		// 2. Siblings via Handle
+		// -------------------------------------------------------------------------------
 		TArray<const UScriptableObject*> AccessibleObjects;
 
-		// 2. Siblings via Handle
-		// We try to find the handle that represents 'TargetObject' in the editor hierarchy
 		if (TSharedPtr<IPropertyHandle> ObjectHandle = FindObjectHandleInHierarchy(Handle, TargetObject))
 		{
 			CollectSiblingsFromHandle(ObjectHandle, AccessibleObjects);
 		}
 
+		// -------------------------------------------------------------------------------
 		// 3. Traversal (Hierarchical Parents & Siblings of Parents)
-		// This handles nested tasks (e.g., inside a Sequence Task)
+		// -------------------------------------------------------------------------------
 		const UObject* IteratorNode = TargetObject;
 		while (IteratorNode)
 		{
@@ -287,7 +301,6 @@ namespace ScriptableFrameworkEditor
 		// 4. Convert to Output
 		for (const UScriptableObject* Obj : AccessibleObjects)
 		{
-			// Ensure ID exists (runtime tasks might not have it if created dynamically, but editor tasks should)
 			if (Obj->GetBindingID().IsValid())
 			{
 				FBindableStructDesc& Desc = OutStructDescs.AddDefaulted_GetRef();
