@@ -46,6 +46,9 @@ namespace ScriptableFrameworkEditor
 
 	// --- Action & Binding Helpers ---
 
+	/** Helper to find the nearest parent handle of a specific Struct type */
+	TSharedPtr<IPropertyHandle> FindParentStructHandle(TSharedPtr<IPropertyHandle> ChildHandle, UScriptStruct* TargetStruct);
+
 	/** Finds the PropertyHandle for the FScriptableAction struct that contains the given child handle. */
 	TSharedPtr<IPropertyHandle> FindActionStructHandle(TSharedPtr<IPropertyHandle> ChildHandle);
 

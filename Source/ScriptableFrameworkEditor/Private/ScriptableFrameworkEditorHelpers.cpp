@@ -6,6 +6,7 @@
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableTasks/ScriptableAction.h"
 #include "ScriptableConditions/ScriptableCondition.h"
+#include "ScriptableConditions/ScriptableRequirement.h"
 #include "StructUtils/InstancedStruct.h"
 #include "IPropertyAccessEditor.h"
 
@@ -66,7 +67,7 @@ namespace ScriptableFrameworkEditor
 	{
 		if (FProperty* Property = PropertyHandle->GetProperty())
 		{
-			if (Property->GetMetaData(TEXT("Category")) == TEXT("Hidden")) return false;
+			if (Property->HasMetaData(TEXT("Hidden")) || Property->GetMetaData(TEXT("Category")) == TEXT("Hidden")) return false;
 			if (Property->HasAllPropertyFlags(CPF_Edit | CPF_DisableEditOnInstance))
 			{
 				if (UObject* Object = Property->GetOwnerUObject())
@@ -167,14 +168,14 @@ namespace ScriptableFrameworkEditor
 		return Owner ? Owner->GetBindingID() : FGuid();
 	}
 
-	TSharedPtr<IPropertyHandle> FindActionStructHandle(TSharedPtr<IPropertyHandle> ChildHandle)
+	TSharedPtr<IPropertyHandle> FindParentStructHandle(TSharedPtr<IPropertyHandle> ChildHandle, UScriptStruct* TargetStruct)
 	{
 		TSharedPtr<IPropertyHandle> Current = ChildHandle;
 		while (Current.IsValid())
 		{
 			if (const FStructProperty* StructProp = CastField<FStructProperty>(Current->GetProperty()))
 			{
-				if (StructProp->Struct == FScriptableAction::StaticStruct())
+				if (StructProp->Struct == TargetStruct)
 				{
 					return Current;
 				}
@@ -182,6 +183,11 @@ namespace ScriptableFrameworkEditor
 			Current = Current->GetParentHandle();
 		}
 		return nullptr;
+	}
+
+	TSharedPtr<IPropertyHandle> FindActionStructHandle(TSharedPtr<IPropertyHandle> ChildHandle)
+	{
+		return FindParentStructHandle(ChildHandle, FScriptableAction::StaticStruct());
 	}
 
 	TSharedPtr<IPropertyHandle> FindObjectHandleInHierarchy(TSharedPtr<IPropertyHandle> StartHandle, const UObject* TargetObject)
@@ -396,16 +402,12 @@ namespace ScriptableFrameworkEditor
 		UObject* NewObj = nullptr;
 		if (Handle->GetValue(NewObj) == FPropertyAccess::Success && NewObj)
 		{
-			static const FName CandidateProps[] = { FName("AssetToRun"), FName("AssetToEvaluate") };
-			for (const FName& P : CandidateProps)
+			static const FName NAME_Asset = TEXT("Asset");
+			if (FObjectProperty* AssetProp = CastField<FObjectProperty>(NewObj->GetClass()->FindPropertyByName(NAME_Asset)))
 			{
-				if (FObjectProperty* AssetProp = CastField<FObjectProperty>(NewObj->GetClass()->FindPropertyByName(P)))
-				{
-					NewObj->Modify();
-					void* ValuePtr = AssetProp->ContainerPtrToValuePtr<void>(NewObj);
-					AssetProp->SetObjectPropertyValue(ValuePtr, Asset);
-					return;
-				}
+				NewObj->Modify();
+				void* ValuePtr = AssetProp->ContainerPtrToValuePtr<void>(NewObj);
+				AssetProp->SetObjectPropertyValue(ValuePtr, Asset);
 			}
 		}
 	}

@@ -15,6 +15,7 @@ public:
 	static TSharedRef<IPropertyTypeCustomization> MakeInstance() { return MakeShareable(new FScriptableTaskCustomization); }
 
 protected:
+	virtual UClass* GetWrapperClass() const override;
 	virtual TSharedPtr<SHorizontalBox> GetHeaderValueContent() override;
 
 private:

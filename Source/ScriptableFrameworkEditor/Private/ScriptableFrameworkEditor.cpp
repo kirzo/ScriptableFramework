@@ -10,12 +10,19 @@
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableTasks/ScriptableActionAsset.h"
 #include "ScriptableTasks/ScriptableAction.h"
+
 #include "ScriptableConditions/ScriptableCondition.h"
-#include "ScriptableConditions/ScriptableConditionAsset.h"
+#include "ScriptableConditions/ScriptableRequirementAsset.h"
+#include "ScriptableConditions/ScriptableRequirement.h"
 
 #include "ScriptableFrameworkEd/Customization/ScriptableTaskCustomization.h"
-#include "ScriptableFrameworkEd/Customization/ScriptableConditionCustomization.h"
 #include "ScriptableFrameworkEd/Customization/ScriptableActionCustomization.h"
+
+#include "ScriptableFrameworkEd/Customization/ScriptableRequirementCustomization.h"
+#include "ScriptableFrameworkEd/Customization/ScriptableConditionCustomization.h"
+
+#include "ScriptableConditions/ScriptableCondition_Group.h"
+#include "ScriptableFrameworkEd/Customization/ScriptableConditionGroupCustomization.h"
 
 #include "AssetToolsModule.h"
 
@@ -88,8 +95,8 @@ void FScriptableFrameworkEditorModule::RegisterPropertyLayout(FPropertyEditorMod
 
 void FScriptableFrameworkEditorModule::RegisterAssetTools()
 {
-	RegisterAssetTypeAction<UScriptableActionAsset>(INVTEXT("Scriptable Action"), FScriptableFrameworkEditorStyle::ScriptableTaskColor);
-	RegisterAssetTypeAction<UScriptableConditionAsset>(INVTEXT("Scriptable Condition"), FScriptableFrameworkEditorStyle::ScriptableConditionColor);
+	RegisterAssetTypeAction<UScriptableActionAsset>(INVTEXT("Scriptable Action"), FScriptableFrameworkEditorStyle::ScriptableTaskColor.ToFColor(true));
+	RegisterAssetTypeAction<UScriptableRequirementAsset>(INVTEXT("Scriptable Requirement"), FScriptableFrameworkEditorStyle::ScriptableConditionColor.ToFColor(true));
 }
 
 void FScriptableFrameworkEditorModule::UnregisterAssetTools()
@@ -110,6 +117,8 @@ void FScriptableFrameworkEditorModule::RegisterLayouts()
 	RegisterPropertyLayout<FScriptableTaskCustomization>(PropertyEditorModule, UScriptableTask::StaticClass()->GetFName());
 	RegisterPropertyLayout<FScriptableConditionCustomization>(PropertyEditorModule, UScriptableCondition::StaticClass()->GetFName());
 	RegisterPropertyLayout<FScriptableActionCustomization>(PropertyEditorModule, FScriptableAction::StaticStruct()->GetFName());
+	RegisterPropertyLayout<FScriptableRequirementCustomization>(PropertyEditorModule, FScriptableRequirement::StaticStruct()->GetFName());
+	RegisterPropertyLayout<FScriptableConditionGroupCustomization>(PropertyEditorModule, UScriptableCondition_Group::StaticClass()->GetFName());
 }
 
 void FScriptableFrameworkEditorModule::UnregisterLayouts()

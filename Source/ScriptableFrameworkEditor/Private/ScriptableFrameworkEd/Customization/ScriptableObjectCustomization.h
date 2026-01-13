@@ -21,19 +21,20 @@ struct FAssetData;
 class FScriptableObjectCustomization : public IPropertyTypeCustomization
 {
 public:
-	static TSharedRef<IPropertyTypeCustomization> MakeInstance() { return MakeShareable(new FScriptableObjectCustomization); }
-
 	/** IPropertyTypeCustomization interface */
 	virtual void CustomizeHeader(TSharedRef<IPropertyHandle> PropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
 	virtual void CustomizeChildren(TSharedRef<IPropertyHandle> PropertyHandle, IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
 
-protected:
+	/** Initializes handles and cached data. Call this if overriding CustomizeHeader completely. */
+	virtual void InitCustomization(TSharedRef<IPropertyHandle> InPropertyHandle, IPropertyTypeCustomizationUtils& CustomizationUtils);
+
 	// --- Overridable Extension Points ---
 
 	virtual TSharedPtr<SHorizontalBox> GetHeaderNameContent();
 	virtual TSharedPtr<SHorizontalBox> GetHeaderValueContent();
 	virtual TSharedPtr<SHorizontalBox> GetHeaderExtensionContent();
 
+protected:
 	// --- Internal Logic Helpers ---
 
 	/** Returns the base class allowed for this property (e.g., UScriptableTask, UScriptableCondition, or UScriptableObject). */
@@ -42,6 +43,9 @@ protected:
 	/** Determines if a child property supports binding (skips Arrays/Maps/Sets and metadata "NoBinding"). */
 	bool IsPropertyExtendable(TSharedPtr<IPropertyHandle> InPropertyHandle) const;
 
+	/** Returns the class of the wrapper task/condition (e.g. UScriptableTask_RunAsset). */
+	virtual UClass* GetWrapperClass() const = 0;
+
 	/** Helper to check if a class is a wrapper (RunAsset / EvaluateAsset). */
 	bool IsWrapperClass(const UClass* Class) const;
 
@@ -49,13 +53,7 @@ protected:
 	UObject* GetInnerAsset(UScriptableObject* Obj) const;
 
 	/** Gets the display title (handles wrapping logic). */
-	FText GetDisplayTitle(UScriptableObject* Obj) const;
-
-	/** Creates a new instance of the selected class and assigns it to the handle. */
-	void SetScriptableObjectType(const UClass* NewClass);
-
-	/** Handles setting up a wrapper task/condition when an asset is picked. */
-	void OnAssetPicked(const FAssetData& AssetData);
+	virtual FText GetDisplayTitle(UScriptableObject* Obj) const;
 
 	// --- Child Generation ---
 
@@ -82,8 +80,14 @@ protected:
 	void OnEdit();
 	void OnUseSelected();
 
-	/** Callback when a type is picked from the SScriptableTypePicker. */
+	/** Callback from Picker. */
 	void OnTypePicked(const UStruct* InStruct, const FAssetData& AssetData);
+
+	/** Handles asset selection. */
+	void OnAssetPicked(const FAssetData& AssetData);
+
+	/** Creates a new instance of the selected class and assigns it to the handle. */
+	void InstantiateClass(const UClass* Class);
 
 protected:
 	/** Handle to the property being customized (the Object pointer). */

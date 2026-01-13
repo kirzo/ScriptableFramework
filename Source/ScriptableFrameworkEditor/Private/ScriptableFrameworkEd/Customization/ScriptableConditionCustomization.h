@@ -1,4 +1,4 @@
-// Copyright 2025 kirzo
+// Copyright 2026 kirzo
 
 #pragma once
 
@@ -12,12 +12,16 @@ class FScriptableConditionCustomization : public FScriptableObjectCustomization
 public:
 	static TSharedRef<IPropertyTypeCustomization> MakeInstance() { return MakeShareable(new FScriptableConditionCustomization); }
 
-	virtual void CustomizeHeader(TSharedRef<IPropertyHandle> PropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
-	//virtual void GatherChildProperties(TSharedPtr<IPropertyHandle> ChildPropertyHandle) override;
+protected:
+	virtual UClass* GetWrapperClass() const override;
+	virtual TSharedPtr<SHorizontalBox> GetHeaderValueContent() override;
+	virtual FText GetDisplayTitle(class UScriptableObject* Obj) const override;
 
 private:
-	TSharedPtr<IPropertyHandle> NegatePropertyHandle;
-
-	ECheckBoxState GetNegateCheckBoxState() const;
-	void OnNegateCheckBoxChanged(ECheckBoxState NewCheckedState);
+	// --- Negate Logic ---
+	bool GetNegateValue() const;
+	FReply OnNegateClicked();
+	FSlateColor GetNegateColor() const;
+	FText GetNegateText() const;
+	FText GetNegateTooltip() const;
 };

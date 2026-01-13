@@ -9,8 +9,11 @@
 #define BOX_BRUSH( RelativePath, ... ) FSlateBoxBrush( RootToContentDir( RelativePath, TEXT(".png") ), __VA_ARGS__ )
 #define BORDER_BRUSH( RelativePath, ... ) FSlateBorderBrush( RootToContentDir( RelativePath, TEXT(".png") ), __VA_ARGS__ )
 
-FColor FScriptableFrameworkEditorStyle::ScriptableTaskColor = FColor(0, 169, 255);
-FColor FScriptableFrameworkEditorStyle::ScriptableConditionColor = FColor(145, 2, 23);
+FLinearColor FScriptableFrameworkEditorStyle::ScriptableTaskColor = FLinearColor(0.0f, 0.66f, 1.0f);
+FLinearColor FScriptableFrameworkEditorStyle::ScriptableConditionColor = FLinearColor(0.57f, 0.0f, 0.09f);
+
+FLinearColor FScriptableFrameworkEditorStyle::InactiveColor = FLinearColor(0.2f, 0.2f, 0.2f, 0.5f);
+FLinearColor FScriptableFrameworkEditorStyle::NegateColor = FLinearColor(0.8f, 0.1f, 0.1f);
 
 void FScriptableFrameworkEditorStyle::Register()
 {
@@ -47,8 +50,8 @@ FScriptableFrameworkEditorStyle::FScriptableFrameworkEditorStyle()
 	Set("ClassIcon.ScriptableActionAsset", new IMAGE_BRUSH(TEXT("ScriptableTask_16x"), Icon16));
 	Set("ClassThumbnail.ScriptableActionAsset", new IMAGE_BRUSH(TEXT("ScriptableTask_64x"), Icon64));
 
-	Set("ClassIcon.ScriptableConditionAsset", new IMAGE_BRUSH(TEXT("ScriptableCondition_16x"), Icon16));
-	Set("ClassThumbnail.ScriptableConditionAsset", new IMAGE_BRUSH(TEXT("ScriptableCondition_64x"), Icon64));
+	Set("ClassIcon.ScriptableRequirementAsset", new IMAGE_BRUSH(TEXT("ScriptableCondition_16x"), Icon16));
+	Set("ClassThumbnail.ScriptableRequirementAsset", new IMAGE_BRUSH(TEXT("ScriptableCondition_64x"), Icon64));
 
 	// Parameter labels
 	const FTextBlockStyle& NormalText = FAppStyle::Get().GetWidgetStyle<FTextBlockStyle>("NormalText");

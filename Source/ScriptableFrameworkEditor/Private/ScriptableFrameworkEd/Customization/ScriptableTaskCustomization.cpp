@@ -2,6 +2,7 @@
 
 #include "ScriptableTaskCustomization.h"
 #include "ScriptableTasks/ScriptableTask.h"
+#include "ScriptableTasks/ScriptableActionAsset.h"
 #include "ScriptableFrameworkEditorStyle.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Layout/SBorder.h"
@@ -11,6 +12,11 @@
 UE_DISABLE_OPTIMIZATION
 
 #define LOCTEXT_NAMESPACE "FScriptableTaskCustomization"
+
+UClass* FScriptableTaskCustomization::GetWrapperClass() const
+{
+	return UScriptableTask_RunAsset::StaticClass();
+}
 
 TSharedPtr<IPropertyHandle> FScriptableTaskCustomization::GetControlProperty(FName PropertyName) const
 {
@@ -27,7 +33,7 @@ TSharedPtr<IPropertyHandle> FScriptableTaskCustomization::GetControlProperty(FNa
 
 TSharedPtr<SHorizontalBox> FScriptableTaskCustomization::GetHeaderValueContent()
 {
-	TSharedPtr<SHorizontalBox> Box = SNew(SHorizontalBox);// Super::GetHeaderValueContent();
+	TSharedPtr<SHorizontalBox> Box = FScriptableObjectCustomization::GetHeaderValueContent();
 	if (!Box.IsValid()) Box = SNew(SHorizontalBox);
 
 	// --- DoOnce Toggle ---
@@ -126,7 +132,7 @@ FReply FScriptableTaskCustomization::OnDoOnceClicked()
 FSlateColor FScriptableTaskCustomization::GetDoOnceColor() const
 {
 	// Orange if Active, Dark Gray/Subdued if Inactive
-	return GetDoOnceValue() ? FLinearColor(0.8f, 0.4f, 0.1f) : FLinearColor(0.2f, 0.2f, 0.2f, 0.5f);
+	return GetDoOnceValue() ? FLinearColor(0.8f, 0.4f, 0.1f) : FScriptableFrameworkEditorStyle::InactiveColor;
 }
 
 FText FScriptableTaskCustomization::GetDoOnceText() const
@@ -169,7 +175,7 @@ FReply FScriptableTaskCustomization::OnLoopClicked()
 FSlateColor FScriptableTaskCustomization::GetLoopColor() const
 {
 	// Blue if Active, Dark Gray/Subdued if Inactive
-	return GetLoopValue() ? FLinearColor(0.1f, 0.4f, 0.8f) : FLinearColor(0.2f, 0.2f, 0.2f, 0.5f);
+	return GetLoopValue() ? FLinearColor(0.1f, 0.4f, 0.8f) : FScriptableFrameworkEditorStyle::InactiveColor;
 }
 
 FText FScriptableTaskCustomization::GetLoopText() const

@@ -9,8 +9,11 @@ class SCRIPTABLEFRAMEWORKEDITOR_API FScriptableFrameworkEditorStyle : public FSl
 public:
 	static FScriptableFrameworkEditorStyle& Get();
 
-	static FColor ScriptableTaskColor;
-	static FColor ScriptableConditionColor;
+	static FLinearColor ScriptableTaskColor;
+	static FLinearColor ScriptableConditionColor;
+
+	static FLinearColor InactiveColor;
+	static FLinearColor NegateColor;
 
 protected:
 	friend class FScriptableFrameworkEditorModule;

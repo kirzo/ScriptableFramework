@@ -16,7 +16,7 @@ FScriptableAction::~FScriptableAction()
 void FScriptableAction::Register(UObject* InOwner)
 {
 	Owner = InOwner;
-	BindingSourceMap.Reset(); // Ensure clean slate
+	BindingSourceMap.Reset(); // Clean slate
 
 	// Filter invalid tasks
 	for (int32 i = Tasks.Num() - 1; i >= 0; --i)
@@ -31,7 +31,7 @@ void FScriptableAction::Register(UObject* InOwner)
 	{
 		if (Task)
 		{
-			// Register the task into our local Binding Map.
+			// Add to local map and inject THIS Context into the task
 			AddBindingSource(Task);
 
 			if (Task->IsEnabled())

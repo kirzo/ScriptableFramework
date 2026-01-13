@@ -56,9 +56,6 @@ public:
 	FScriptableActionNativeDelegate OnActionBegin;
 	FScriptableActionNativeDelegate OnActionFinish;
 
-	// -------------------------------------------------------------------
-	// Runtime State (Transient)
-	// -------------------------------------------------------------------
 private:
 	/** The index of the currently running task (used in Sequence mode). */
 	UPROPERTY(Transient)
@@ -100,7 +97,7 @@ public:
 	/** Returns true if the action is currently executing. */
 	bool IsRunning() const { return bIsRunning; }
 
-	// --- Root / Context Accessors ---
+	// --- Context & Binding Accessors ---
 
 	FInstancedPropertyBag& GetContext() { return Context; }
 	const FInstancedPropertyBag& GetContext() const { return Context; }
@@ -134,11 +131,11 @@ public:
 		return Result.HasValue() ? Result.GetValue() : T();
 	}
 
-	/** Finds a registered task/object by its persistent ID (used by Property Bindings). */
+	/** Finds a registered object by its persistent ID (used by Property Bindings). */
 	UScriptableObject* FindBindingSource(const FGuid& InID) const;
 
 private:
-	/** Registers a source into the map (called internally during Register). */
+	/** Populates the map and initializes the child with this context. */
 	void AddBindingSource(UScriptableObject* InSource);
 
 	void BeginSubTask(UScriptableTask* Task);

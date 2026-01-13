@@ -4,6 +4,10 @@
 #include "ScriptableObject.h"
 #include "Bindings/ScriptablePropertyBindings.h"
 #include "PropertyBindingPath.h"
+
+#include "ScriptableTasks/ScriptableActionAsset.h"
+#include "ScriptableConditions/ScriptableRequirementAsset.h"
+
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "ScriptableFrameworkEditorStyle.h"
 
@@ -511,10 +515,36 @@ private:
 
 void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> InPropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils)
 {
+	InitCustomization(InPropertyHandle, CustomizationUtils);
+
+	if (ScriptableObject.IsValid())
+	{
+		HeaderRow.OverrideResetToDefault(FResetToDefaultOverride::Create(
+			FIsResetToDefaultVisible::CreateSP(this, &FScriptableObjectCustomization::IsResetToDefaultVisible),
+			FResetToDefaultHandler::CreateSP(this, &FScriptableObjectCustomization::OnResetToDefault)
+		));
+	}
+
+	HeaderRow
+		.NameContent()
+		[
+			GetHeaderNameContent().ToSharedRef()
+		]
+		.ValueContent()
+		[
+			GetHeaderValueContent().ToSharedRef()
+		]
+		.ExtensionContent()
+		[
+			GetHeaderExtensionContent().ToSharedRef()
+		];
+}
+
+void FScriptableObjectCustomization::InitCustomization(TSharedRef<IPropertyHandle> InPropertyHandle, IPropertyTypeCustomizationUtils& CustomizationUtils)
+{
 	PropertyHandle = InPropertyHandle;
 	PropertyUtilities = CustomizationUtils.GetPropertyUtilities();
 
-	// 1. Init Data
 	UObject* Object = nullptr;
 	PropertyHandle->GetValue(Object);
 	UScriptableObject* ScriptableObj = Cast<UScriptableObject>(Object);
@@ -529,30 +559,6 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 	{
 		NodeTitle = FText::FromString(TEXT("None"));
 	}
-
-	// 2. Setup Reset Logic
-	if (ScriptableObj)
-	{
-		HeaderRow.OverrideResetToDefault(FResetToDefaultOverride::Create(
-			FIsResetToDefaultVisible::CreateSP(this, &FScriptableObjectCustomization::IsResetToDefaultVisible),
-			FResetToDefaultHandler::CreateSP(this, &FScriptableObjectCustomization::OnResetToDefault)
-		));
-	}
-
-	// 3. Build Row using Virtual methods
-	HeaderRow
-		.NameContent()
-		[
-			GetHeaderNameContent().ToSharedRef()
-		]
-		.ValueContent()
-		[
-			GetHeaderValueContent().ToSharedRef()
-		]
-		.ExtensionContent()
-		[
-			GetHeaderExtensionContent().ToSharedRef()
-		];
 }
 
 TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderNameContent()
@@ -741,25 +747,19 @@ UClass* FScriptableObjectCustomization::GetBaseClass() const
 
 bool FScriptableObjectCustomization::IsWrapperClass(const UClass* Class) const
 {
-	if (!Class) return false;
-	static const FName RunAsset(TEXT("ScriptableTask_RunAsset"));
-	static const FName CondAsset(TEXT("ScriptableCondition_Asset"));
-	const FName N = Class->GetFName();
-	return (N == RunAsset || N == CondAsset);
+	return Class ? Class->IsChildOf(GetWrapperClass()) : false;
 }
 
 UObject* FScriptableObjectCustomization::GetInnerAsset(UScriptableObject* Obj) const
 {
 	if (!Obj) return nullptr;
-	static const FName CandidateProps[] = { FName("AssetToRun"), FName("AssetToEvaluate") };
-	for (const FName& P : CandidateProps)
+
+	static const FName NAME_Asset = TEXT("Asset");
+	if (FObjectProperty* AssetProp = CastField<FObjectProperty>(Obj->GetClass()->FindPropertyByName(NAME_Asset)))
 	{
-		if (FObjectProperty* AssetProp = CastField<FObjectProperty>(Obj->GetClass()->FindPropertyByName(P)))
+		if (UObject* Asset = AssetProp->GetObjectPropertyValue_InContainer(Obj))
 		{
-			if (UObject* Asset = AssetProp->GetObjectPropertyValue_InContainer(Obj))
-			{
-				return Asset;
-			}
+			return Asset;
 		}
 	}
 	return nullptr;
@@ -816,7 +816,7 @@ void FScriptableObjectCustomization::OnResetToDefault(TSharedPtr<IPropertyHandle
 	if (Handle->GetValue(Obj) == FPropertyAccess::Success && Obj)
 	{
 		// Re-instantiate the same class (reset to defaults)
-		SetScriptableObjectType(Obj->GetClass());
+		InstantiateClass(Obj->GetClass());
 	}
 }
 
@@ -881,18 +881,6 @@ void FScriptableObjectCustomization::OnEdit()
 	}
 }
 
-void FScriptableObjectCustomization::OnTypePicked(const UStruct* InStruct, const FAssetData& AssetData)
-{
-	if (AssetData.IsValid())
-	{
-		OnAssetPicked(AssetData);
-	}
-	else if (const UClass* PickedClass = Cast<UClass>(InStruct))
-	{
-		SetScriptableObjectType(PickedClass);
-	}
-}
-
 void FScriptableObjectCustomization::OnUseSelected()
 {
 	TArray<FAssetData> SelectedAssets;
@@ -905,16 +893,12 @@ void FScriptableObjectCustomization::OnUseSelected()
 		{
 			if (SelectedBlueprint->GeneratedClass && SelectedBlueprint->GeneratedClass->IsChildOf(GetBaseClass()))
 			{
-				SetScriptableObjectType(SelectedBlueprint->GeneratedClass);
+				InstantiateClass(SelectedBlueprint->GeneratedClass);
 				return;
 			}
 		}
 		// 2. Check for Task/Condition Asset (Wrappers)
-		static const FName ActionAsset(TEXT("ScriptableActionAsset"));
-		static const FName CondAsset(TEXT("ScriptableConditionAsset"));
-		const FName AssetName = AssetData.AssetClassPath.GetAssetName();
-
-		if (AssetName == ActionAsset || AssetName == CondAsset)
+		if (AssetData.IsInstanceOf<UScriptableObjectAsset>())
 		{
 			OnAssetPicked(AssetData);
 			return;
@@ -922,11 +906,36 @@ void FScriptableObjectCustomization::OnUseSelected()
 	}
 }
 
-void FScriptableObjectCustomization::SetScriptableObjectType(const UClass* NewClass)
+void FScriptableObjectCustomization::OnTypePicked(const UStruct* InStruct, const FAssetData& AssetData)
+{
+	if (AssetData.IsValid())
+	{
+		OnAssetPicked(AssetData);
+	}
+	else if (const UClass* PickedClass = Cast<UClass>(InStruct))
+	{
+		InstantiateClass(PickedClass);
+	}
+}
+
+void FScriptableObjectCustomization::OnAssetPicked(const FAssetData& AssetData)
+{
+	if (AssetData.IsInstanceOf(UScriptableObjectAsset::StaticClass()))
+	{
+		UClass* WrapperClass = GetWrapperClass();
+		if (WrapperClass)
+		{
+			InstantiateClass(WrapperClass);
+			ScriptableFrameworkEditor::SetWrapperAssetProperty(PropertyHandle, AssetData.GetAsset());
+		}
+	}
+}
+
+void FScriptableObjectCustomization::InstantiateClass(const UClass* NewClass)
 {
 	if (NewClass->IsChildOf(GetBaseClass()))
 	{
-		GEditor->BeginTransaction(LOCTEXT("SetScriptableObjectType", "Set Scriptable Object Type"));
+		FScopedTransaction Transaction(LOCTEXT("InstantiateClass", "Instantiate Class"));
 		PropertyHandle->NotifyPreChange();
 
 		PropertyCustomizationHelpers::CreateNewInstanceOfEditInlineObjectClass(
@@ -936,46 +945,7 @@ void FScriptableObjectCustomization::SetScriptableObjectType(const UClass* NewCl
 		);
 
 		PropertyHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
-		PropertyHandle->NotifyFinishedChangingProperties();
-		GEditor->EndTransaction();
 
-		FSlateApplication::Get().DismissAllMenus();
-		if (PropertyUtilities) PropertyUtilities->ForceRefresh();
-	}
-}
-
-void FScriptableObjectCustomization::OnAssetPicked(const FAssetData& AssetData)
-{
-	UClass* WrapperClass = nullptr;
-	if (AssetData.AssetClassPath.GetAssetName() == "ScriptableActionAsset")
-	{
-		WrapperClass = FindObject<UClass>(nullptr, TEXT("/Script/ScriptableFramework.ScriptableTask_RunAsset"));
-	}
-	else if (AssetData.AssetClassPath.GetAssetName() == "ScriptableConditionAsset")
-	{
-		WrapperClass = FindObject<UClass>(nullptr, TEXT("/Script/ScriptableFramework.ScriptableCondition_Asset"));
-	}
-
-	if (WrapperClass)
-	{
-		GEditor->BeginTransaction(LOCTEXT("SetScriptableAsset", "Set Scriptable Asset"));
-		PropertyHandle->NotifyPreChange();
-
-		// Create the wrapper instance
-		PropertyCustomizationHelpers::CreateNewInstanceOfEditInlineObjectClass(
-			PropertyHandle.ToSharedRef(),
-			WrapperClass,
-			EPropertyValueSetFlags::InteractiveChange
-		);
-
-		// Assign the internal asset
-		ScriptableFrameworkEditor::SetWrapperAssetProperty(PropertyHandle, AssetData.GetAsset());
-
-		PropertyHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
-		PropertyHandle->NotifyFinishedChangingProperties();
-		GEditor->EndTransaction();
-
-		FSlateApplication::Get().DismissAllMenus();
 		if (PropertyUtilities) PropertyUtilities->ForceRefresh();
 	}
 }

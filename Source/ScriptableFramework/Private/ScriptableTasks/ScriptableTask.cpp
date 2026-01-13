@@ -135,7 +135,7 @@ void UScriptableTask_RunAsset::ResetTask()
 
 void UScriptableTask_RunAsset::BeginTask()
 {
-	if (AssetToRun && !RuntimeAction.Tasks.IsEmpty())
+	if (Asset && !RuntimeAction.Tasks.IsEmpty())
 	{
 		RuntimeAction.Begin();
 	}
@@ -156,10 +156,10 @@ void UScriptableTask_RunAsset::InstantiateRuntimeAction()
 {
 	TeardownRuntimeAction();
 
-	if (AssetToRun)
+	if (Asset)
 	{
 		// Copy the Struct
-		RuntimeAction = AssetToRun->Action;
+		RuntimeAction = Asset->Action;
 
 		// Deep Copy Tasks
 		// The 'Tasks' array currently points to the Asset's archetype objects.

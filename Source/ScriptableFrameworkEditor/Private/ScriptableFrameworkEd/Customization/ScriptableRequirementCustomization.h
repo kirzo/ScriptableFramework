@@ -5,10 +5,12 @@
 #include "CoreMinimal.h"
 #include "ScriptableContainerCustomization.h"
 
-class FScriptableActionCustomization : public FScriptableContainerCustomization
+class FScriptableRequirementCustomization : public FScriptableContainerCustomization
 {
 public:
-	static TSharedRef<IPropertyTypeCustomization> MakeInstance() { return MakeShareable(new FScriptableActionCustomization); }
+	static TSharedRef<IPropertyTypeCustomization> MakeInstance() { return MakeShareable(new FScriptableRequirementCustomization); }
+
+	virtual TSharedPtr<SHorizontalBox> GetHeaderValueContent() override;
 
 protected:
 	virtual UClass* GetBaseClass() const override;
@@ -22,4 +24,12 @@ protected:
 	virtual FText GetModeText() const override;
 	virtual FSlateColor GetModeColor() const override;
 	virtual FText GetModeTooltip() const override;
+
+private:
+	// --- Negate Logic ---
+	bool GetNegateValue() const;
+	FReply OnNegateClicked();
+	FSlateColor GetNegateColor() const;
+	FText GetNegateText() const;
+	FText GetNegateTooltip() const;
 };

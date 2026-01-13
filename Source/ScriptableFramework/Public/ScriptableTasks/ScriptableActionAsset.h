@@ -10,7 +10,7 @@
 
 /** An asset that defines a reusable Action. */
 UCLASS(BlueprintType, Const)
-class SCRIPTABLEFRAMEWORK_API UScriptableActionAsset : public UScriptableObjectAsset
+class SCRIPTABLEFRAMEWORK_API UScriptableActionAsset final : public UScriptableObjectAsset
 {
 	GENERATED_BODY()
 
@@ -21,17 +21,18 @@ public:
 };
 
 UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Run Asset", Hidden))
-class UScriptableTask_RunAsset final : public UScriptableTask
+class SCRIPTABLEFRAMEWORK_API UScriptableTask_RunAsset final : public UScriptableTask
 {
 	GENERATED_BODY()
 
 public:
 	/** The asset containing the Action definition (Context + Tasks) to run. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = ScriptableTask)
-	TObjectPtr<class UScriptableActionAsset> AssetToRun;
+	TObjectPtr<class UScriptableActionAsset> Asset;
 
 protected:
-	/** * The runtime instance of the action.
+	/**
+	 * The runtime instance of the action.
 	 * This holds the unique state (Context memory, Task instances) for this execution.
 	 */
 	UPROPERTY(Transient)

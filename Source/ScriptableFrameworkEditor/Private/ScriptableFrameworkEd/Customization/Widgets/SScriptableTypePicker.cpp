@@ -14,7 +14,7 @@
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableTasks/ScriptableActionAsset.h"
 #include "ScriptableConditions/ScriptableCondition.h"
-#include "ScriptableConditions/ScriptableConditionAsset.h"
+#include "ScriptableConditions/ScriptableRequirementAsset.h"
 
 UE_DISABLE_OPTIMIZATION
 
@@ -341,19 +341,15 @@ void SScriptableTypePicker::AddNode(const FAssetData& AssetData)
 	Item->AssetData = AssetData;
 
 	// Resolve Icon
-	static const FName ActionAssetName(TEXT("ScriptableActionAsset"));
-	static const FName ConditionAssetName(TEXT("ScriptableConditionAsset"));
-
-	const FName AssetClassName = AssetData.AssetClassPath.GetAssetName();
 	FName IconName = NAME_None;
 
-	if (AssetClassName == ActionAssetName)
+	if (AssetData.IsInstanceOf<UScriptableActionAsset>())
 	{
 		IconName = "ClassIcon.ScriptableActionAsset";
 	}
-	else if (AssetClassName == ConditionAssetName)
+	else if (AssetData.IsInstanceOf<UScriptableRequirementAsset>())
 	{
-		IconName = "ClassIcon.ScriptableConditionAsset";
+		IconName = "ClassIcon.ScriptableRequirementAsset";
 	}
 
 	if (!IconName.IsNone())
@@ -495,7 +491,7 @@ void SScriptableTypePicker::CacheTypes(const UScriptStruct* BaseScriptStruct, co
 	}
 	else if (BaseClass && BaseClass->IsChildOf(UScriptableCondition::StaticClass()))
 	{
-		AssetClassToSearch = UScriptableConditionAsset::StaticClass();
+		AssetClassToSearch = UScriptableRequirementAsset::StaticClass();
 	}
 
 	if (AssetClassToSearch)

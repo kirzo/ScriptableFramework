@@ -1,60 +1,113 @@
-// Copyright 2025 kirzo
+// Copyright 2026 kirzo
 
 #include "ScriptableConditionCustomization.h"
+#include "ScriptableConditions/ScriptableCondition.h"
+#include "ScriptableConditions/ScriptableRequirementAsset.h"
+
+#include "ScriptableFrameworkEditorStyle.h"
 
 #define LOCTEXT_NAMESPACE "FScriptableConditionCustomization"
 
-void FScriptableConditionCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> StructPropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils)
+UClass* FScriptableConditionCustomization::GetWrapperClass() const
 {
-	TArray<UObject*> OuterObjects;
-	StructPropertyHandle->GetOuterObjects(OuterObjects);
+	return UScriptableCondition_Asset::StaticClass();
+}
 
-	if (OuterObjects.Num() > 1)
-	{
-		return;
-	}
+TSharedPtr<SHorizontalBox> FScriptableConditionCustomization::GetHeaderValueContent()
+{
+	TSharedPtr<SHorizontalBox> Box = FScriptableObjectCustomization::GetHeaderValueContent();
+	if (!Box.IsValid()) Box = SNew(SHorizontalBox);
 
-	FScriptableObjectCustomization::CustomizeHeader(StructPropertyHandle, HeaderRow, CustomizationUtils);
-
-	/*HorizontalBox->InsertSlot(1)
+	// --- Negate Toggle ---
+	Box->AddSlot()
 		.AutoWidth()
+		.VAlign(VAlign_Center)
+		.Padding(0, 0, 6, 0)
 		[
-			SNew(SCheckBox)
-				.ToolTipText(LOCTEXT("ConditionNegateTooltip", "Negate the condition."))
-				.CheckedImage(FAppStyle::GetBrush("MessageLog.Warning"))
-				.CheckedHoveredImage(FAppStyle::GetBrush("MessageLog.Warning"))
-				.CheckedPressedImage(FAppStyle::GetBrush("MessageLog.Warning"))
-				.ForegroundColor(FColor::Red)
-				.IsChecked(this, &FScriptableConditionCustomization::GetNegateCheckBoxState)
-				.OnCheckStateChanged(this, &FScriptableConditionCustomization::OnNegateCheckBoxChanged)
-		];*/
+			SNew(SButton)
+				.ButtonStyle(FAppStyle::Get(), "HoverHintOnly")
+				.OnClicked(this, &FScriptableConditionCustomization::OnNegateClicked)
+				.ToolTipText(GetNegateTooltip())
+				.ContentPadding(0)
+				[
+					SNew(SBorder)
+						.Padding(FMargin(6, 1))
+						.BorderImage(FScriptableFrameworkEditorStyle::Get().GetBrush("ScriptableFramework.Param.Background"))
+						.BorderBackgroundColor(this, &FScriptableConditionCustomization::GetNegateColor)
+						.VAlign(VAlign_Center)
+						[
+							SNew(STextBlock)
+								.Text(this, &FScriptableConditionCustomization::GetNegateText)
+								.TextStyle(FScriptableFrameworkEditorStyle::Get(), "ScriptableFramework.Param.Label")
+								.ColorAndOpacity(FLinearColor::White)
+						]
+				]
+		];
+
+	return Box;
 }
 
-//void FScriptableConditionCustomization::GatherChildProperties(TSharedPtr<IPropertyHandle> ChildPropertyHandle)
-//{
-//	NegatePropertyHandle = ChildPropertyHandle->GetChildHandle("bNegate");
-//}
-
-ECheckBoxState FScriptableConditionCustomization::GetNegateCheckBoxState() const
+FText FScriptableConditionCustomization::GetDisplayTitle(UScriptableObject* Obj) const
 {
-	bool bEnabled = false;
-
-	if (NegatePropertyHandle.IsValid())
+	if (IsWrapperClass(Obj->GetClass()))
 	{
-		NegatePropertyHandle->GetValue(bEnabled);
+		return FScriptableObjectCustomization::GetDisplayTitle(Obj);
 	}
 
-	return bEnabled ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+	if (UScriptableCondition* Condition = Cast<UScriptableCondition>(Obj))
+	{
+		return Condition->GetDescription();
+	}
+
+	return FScriptableObjectCustomization::GetDisplayTitle(Obj);
 }
 
-void FScriptableConditionCustomization::OnNegateCheckBoxChanged(ECheckBoxState NewCheckedState)
+// -------------------------------------------------------------------
+// Negate Logic
+// -------------------------------------------------------------------
+
+bool FScriptableConditionCustomization::GetNegateValue() const
 {
-	const bool bEnabled = (NewCheckedState == ECheckBoxState::Checked);
-	if (NegatePropertyHandle.IsValid())
+	if (PropertyHandle.IsValid())
 	{
-		NegatePropertyHandle->SetValue(bEnabled);
-		NegatePropertyHandle->RequestRebuildChildren();
+		if (TSharedPtr<IPropertyHandle> Prop = PropertyHandle->GetChildHandle(TEXT("bNegate")))
+		{
+			bool bVal = false;
+			Prop->GetValue(bVal);
+			return bVal;
+		}
 	}
+	return false;
+}
+
+FReply FScriptableConditionCustomization::OnNegateClicked()
+{
+	if (PropertyHandle.IsValid())
+	{
+		if (TSharedPtr<IPropertyHandle> Prop = PropertyHandle->GetChildHandle(TEXT("bNegate")))
+		{
+			bool bNewVal = !GetNegateValue();
+			FScopedTransaction Transaction(LOCTEXT("ToggleNegate", "Toggle Negate Condition"));
+			Prop->SetValue(bNewVal);
+		}
+	}
+	return FReply::Handled();
+}
+
+FSlateColor FScriptableConditionCustomization::GetNegateColor() const
+{
+	// Red/Orange if Negated (Active), Dark Gray if Normal (Inactive)
+	return GetNegateValue() ? FScriptableFrameworkEditorStyle::NegateColor : FScriptableFrameworkEditorStyle::InactiveColor;
+}
+
+FText FScriptableConditionCustomization::GetNegateText() const
+{
+	return LOCTEXT("NegateLabel", "NOT");
+}
+
+FText FScriptableConditionCustomization::GetNegateTooltip() const
+{
+	return LOCTEXT("NegateTooltip", "Negates the result of this condition.");
 }
 
 #undef LOCTEXT_NAMESPACE
