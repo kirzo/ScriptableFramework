@@ -136,7 +136,14 @@ namespace ScriptableFrameworkEditor
 			}
 		}
 
-		// 3. Numeric & Bool Conversions (Bidirectional)
+		// 3. Object -> Bool (IsValid check)
+		// Allows binding an Object directly to a Bool (True if valid, False if null)
+		if (SourceProp->IsA<FObjectPropertyBase>() && TargetProp->IsA<FBoolProperty>())
+		{
+			return true;
+		}
+
+		// 4. Numeric & Bool Conversions (Bidirectional)
 		const bool bSourceNumeric = SourceProp->IsA<FNumericProperty>();
 		const bool bTargetNumeric = TargetProp->IsA<FNumericProperty>();
 		const bool bSourceBool = SourceProp->IsA<FBoolProperty>();

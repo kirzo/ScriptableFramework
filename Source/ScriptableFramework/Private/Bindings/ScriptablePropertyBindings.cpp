@@ -177,6 +177,7 @@ void FScriptablePropertyBindings::CopySingleBinding(const FScriptablePropertyBin
 			// Object Reference Handling (TObjectPtr <-> Raw Ptr, Child -> Parent)
 			if (const FObjectPropertyBase* SrcObjProp = CastField<FObjectPropertyBase>(SourceProp))
 			{
+				// TObjectPtr <-> Raw Ptr
 				if (const FObjectPropertyBase* TgtObjProp = CastField<FObjectPropertyBase>(TargetProp))
 				{
 					// This gets the UObject* regardless of whether it's stored as TObjectPtr or raw pointer
@@ -186,6 +187,15 @@ void FScriptablePropertyBindings::CopySingleBinding(const FScriptablePropertyBin
 					{
 						TgtObjProp->SetObjectPropertyValue(TargetAddr, SourceObject);
 					}
+				}
+				// Object -> Bool
+				else if (const FBoolProperty* TgtBool = CastField<FBoolProperty>(TargetProp))
+				{
+					// Get the pointer (works for TObjectPtr and raw pointers)
+					const UObject* SourceObject = SrcObjProp->GetObjectPropertyValue(SourceAddr);
+
+					// True if not null, False if null
+					TgtBool->SetPropertyValue(TargetAddr, SourceObject != nullptr);
 				}
 			}
 			// Numeric <-> Numeric Conversion
