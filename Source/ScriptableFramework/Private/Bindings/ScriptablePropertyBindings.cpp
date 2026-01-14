@@ -167,14 +167,29 @@ void FScriptablePropertyBindings::CopySingleBinding(const FScriptablePropertyBin
 
 	if (SourceProp && TargetProp && SourceAddr && TargetAddr)
 	{
+		// Identical Types (Fast Copy)
 		if (SourceProp->SameType(TargetProp))
 		{
 			SourceProp->CopyCompleteValue(TargetAddr, SourceAddr);
 		}
 		else
 		{
+			// Object Reference Handling (TObjectPtr <-> Raw Ptr, Child -> Parent)
+			if (const FObjectPropertyBase* SrcObjProp = CastField<FObjectPropertyBase>(SourceProp))
+			{
+				if (const FObjectPropertyBase* TgtObjProp = CastField<FObjectPropertyBase>(TargetProp))
+				{
+					// This gets the UObject* regardless of whether it's stored as TObjectPtr or raw pointer
+					UObject* SourceObject = SrcObjProp->GetObjectPropertyValue(SourceAddr);
+
+					if (!SourceObject || SourceObject->IsA(TgtObjProp->PropertyClass))
+					{
+						TgtObjProp->SetObjectPropertyValue(TargetAddr, SourceObject);
+					}
+				}
+			}
 			// Numeric <-> Numeric Conversion
-			if (SourceProp->IsA<FNumericProperty>() && TargetProp->IsA<FNumericProperty>())
+			else if (SourceProp->IsA<FNumericProperty>() && TargetProp->IsA<FNumericProperty>())
 			{
 				const FNumericProperty* SrcNum = CastField<FNumericProperty>(SourceProp);
 				const FNumericProperty* TgtNum = CastField<FNumericProperty>(TargetProp);

@@ -326,6 +326,25 @@ namespace ScriptablePropertyBag
 		}
 	};
 
+	// --- Specialization: UObject Pointers ---
+	template <typename TPropertyType>
+	struct TPropertyBagType<TPropertyType*, typename TEnableIf<TIsDerivedFrom<TPropertyType, UObject>::Value>::Type>
+	{
+		static constexpr EPropertyBagPropertyType Type = EPropertyBagPropertyType::Object;
+		static const UObject* GetObjectType() { return TPropertyType::StaticClass(); }
+
+		static TValueOrError<TPropertyType*, EPropertyBagResult> GetValue(const FInstancedPropertyBag& Bag, const FName& Name)
+		{
+			return Bag.GetValueObject<TPropertyType>(Name);
+		}
+
+		static void SetValue(FInstancedPropertyBag& Bag, const FName& Name, TPropertyType* Value)
+		{
+			Bag.AddProperty(Name, Type, GetObjectType());
+			Bag.SetValueObject(Name, Value);
+		}
+	};
+
 	// ------------------------------------------------------------------------------------------------
 	// Public Helper API
 	// ------------------------------------------------------------------------------------------------
