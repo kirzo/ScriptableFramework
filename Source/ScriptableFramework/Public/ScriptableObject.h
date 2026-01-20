@@ -12,8 +12,6 @@
 
 SCRIPTABLEFRAMEWORK_API DECLARE_LOG_CATEGORY_EXTERN(LogScriptableObject, Log, All);
 
-struct FBindableStructDesc;
-
 /** Base class for all scriptable objects in the framework. */
 UCLASS(Abstract, DefaultToInstanced, EditInlineNew, Blueprintable, BlueprintType, HideCategories = (Hidden), CollapseCategories)
 class SCRIPTABLEFRAMEWORK_API UScriptableObject : public UObject
