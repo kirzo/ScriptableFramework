@@ -29,6 +29,7 @@
 #include "StructUtils/InstancedStruct.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Misc/SecureHash.h"
+#include "Misc/StringOutputDevice.h"
 
 #include "HAL/PlatformApplicationMisc.h"
 #include "Framework/Notifications/NotificationManager.h"
