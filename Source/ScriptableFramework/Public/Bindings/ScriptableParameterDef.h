@@ -36,18 +36,18 @@ struct SCRIPTABLEFRAMEWORK_API FScriptableParameterDef
 	}
 
 	/** Name for the property. */
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category = "ScriptableParameter")
 	FName Name;
 
 	/** Pointer to object that defines the Enum, Struct, or Class. */
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category = "ScriptableParameter")
 	TObjectPtr<const UObject> ValueTypeObject = nullptr;
 
 	/** Type of the value described by this property. */
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category = "ScriptableParameter")
 	EPropertyBagPropertyType ValueType = EPropertyBagPropertyType::Bool;
 
 	/** Type of the container described by this property. */
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category = "ScriptableParameter")
 	EPropertyBagContainerType ContainerType = EPropertyBagContainerType::None;
 };
