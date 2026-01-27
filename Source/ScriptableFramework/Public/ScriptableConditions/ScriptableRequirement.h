@@ -52,6 +52,6 @@ public:
 	bool IsEmpty() const { return Conditions.IsEmpty(); }
 
 public:
-	/** Static entry point to run an action. Handles registration and startup. */
-	static bool EvaluateRequirement(UObject* Owner, FScriptableRequirement& Action);
+	/** Static entry point to evaluate a requirement. */
+	static bool EvaluateRequirement(UObject* Owner, const FScriptableRequirement& Requirement);
 };

@@ -88,12 +88,15 @@ bool FScriptableRequirement::Evaluate() const
 	return bNegate ? !bResult : bResult;
 }
 
-bool FScriptableRequirement::EvaluateRequirement(UObject* Owner, FScriptableRequirement& Action)
+bool FScriptableRequirement::EvaluateRequirement(UObject* Owner, const FScriptableRequirement& Requirement)
 {
 	if (!Owner) return false;
 
-	Action.Register(Owner);
-	const bool bResult = Action.Evaluate();
-	Action.Unregister();
+	FScriptableRequirement& MutableReq = const_cast<FScriptableRequirement&>(Requirement);
+
+	MutableReq.Register(Owner);
+	const bool bResult = MutableReq.Evaluate();
+	MutableReq.Unregister();
+
 	return bResult;
 }
