@@ -44,11 +44,16 @@ It feels like editing standard properties but behaves like a logic flow.
 ## 📦 Dependencies
 
 - **Unreal Engine 5.5+**
+- **[KzLib](https://github.com/kirzo/KzLib)** (Required only for **Unreal Engine 5.7+**)
 
 ### Installation
-1.  Clone or download this repository.
-2.  Copy the `ScriptableFramework` folder into your project's `Plugins/` directory (create the folder if it doesn't exist).
-3.  Regenerate project files and compile.
+
+1.  **For UE 5.7+ only:** Download or clone the **KzLib** repository: [https://github.com/kirzo/KzLib](https://github.com/kirzo/KzLib)
+2.  Download or clone this **ScriptableFramework** repository.
+3.  Copy the folder(s) into your project's `Plugins/` directory.
+    * *UE 5.5 / 5.6:* Only `ScriptableFramework` is needed.
+    * *UE 5.7+:* Both `ScriptableFramework` and `KzLib` are required.
+4.  Regenerate project files and compile.
 
 ---
 
