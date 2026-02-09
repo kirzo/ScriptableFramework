@@ -201,9 +201,6 @@ TSharedPtr<IPropertyHandle> FScriptableContainerCustomization::AddElement(const 
 
 	FScopedTransaction Transaction(LOCTEXT("AddElement", "Add Element"));
 
-	StructHandle->NotifyPreChange();
-	ListHandle->NotifyPreChange();
-
 	uint32 NumChildren = 0;
 	ListHandle->GetNumChildren(NumChildren);
 	ListHandle->AsArray()->AddItem();
@@ -212,15 +209,16 @@ TSharedPtr<IPropertyHandle> FScriptableContainerCustomization::AddElement(const 
 
 	if (NewElementHandle.IsValid())
 	{
+		StructHandle->NotifyPreChange();
+
 		PropertyCustomizationHelpers::CreateNewInstanceOfEditInlineObjectClass(
 			NewElementHandle.ToSharedRef(),
 			const_cast<UClass*>(ElementClass),
 			EPropertyValueSetFlags::DefaultFlags
 		);
-	}
 
-	ListHandle->NotifyPostChange(EPropertyChangeType::ArrayAdd);
-	StructHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
+	  StructHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
+	}
 
 	return NewElementHandle;
 }
