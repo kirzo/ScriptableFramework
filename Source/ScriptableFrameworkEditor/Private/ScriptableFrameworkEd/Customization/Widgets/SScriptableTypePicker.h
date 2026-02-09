@@ -25,7 +25,6 @@ public:
 	SLATE_BEGIN_ARGS(SScriptableTypeSelector)
 		: _MinListWidth(200.0f)
 		, _MaxListHeight(450.0f)
-		, _ItemStyle(&FAppStyle::Get().GetWidgetStyle<FTableRowStyle>("ComboBox.Row"))
 		, _SearchVisibility(EVisibility::Visible)
 		, _CurrentStruct(nullptr)
 		, _BaseScriptStruct(nullptr)
@@ -33,6 +32,7 @@ public:
 		, _ClassCategoryMeta(NAME_None)
 		, _FilterCategoryMeta(NAME_None)
 		, _Filter()
+		, _ItemStyle(&FAppStyle::Get().GetWidgetStyle<FTableRowStyle>("ComboBox.Row"))
 	{}
 		/** The min width of the menu */
 		SLATE_ARGUMENT(float, MinListWidth)

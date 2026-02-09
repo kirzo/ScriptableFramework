@@ -59,7 +59,7 @@ void FScriptableContainerCustomization::InitCustomization(TSharedRef<IPropertyHa
 			.BaseClass(GetBaseClass())
 			.ClassCategoryMeta(ClassCategory)
 			.FilterCategoryMeta(PropCategory)
-			.Filter(StructHandle->GetMetaData(PropCategory))
+			.Filter(ScriptableFrameworkEditor::GetPropertyMetaData(StructHandle, PropCategory))
 			.OnNodeTypePicked(SScriptableTypePicker::FOnNodeTypePicked::CreateSP(this, &FScriptableContainerCustomization::OnTypePicked))
 			.Content()
 			[

@@ -100,6 +100,32 @@ namespace ScriptableFrameworkEditor
 		return Category.StartsWith(TEXT("Output"));
 	}
 
+	FString GetPropertyMetaData(const TSharedPtr<IPropertyHandle>& Handle, const FName& MetaDataKey)
+	{
+		if (!Handle.IsValid())
+		{
+			return FString();
+		}
+
+		// Try to get the filter from the handle itself
+		FString FilterString = Handle->GetMetaData(MetaDataKey);
+
+		// If empty, check the Parent (Covers FScriptableAction / Wrapper Struct case)
+		if (FilterString.IsEmpty() && Handle->GetParentHandle().IsValid())
+		{
+			FilterString = Handle->GetParentHandle()->GetMetaData(MetaDataKey);
+
+			// If it is an Array, metadata is usually on the ArrayProperty, not the element.
+			// This covers: Array -> Struct -> Object
+			if (FilterString.IsEmpty() && Handle->GetParentHandle()->GetParentHandle().IsValid())
+			{
+				FilterString = Handle->GetParentHandle()->GetParentHandle()->GetMetaData(MetaDataKey);
+			}
+		}
+
+		return FilterString;
+	}
+
 	bool ArePropertiesCompatible(const FProperty* SourceProp, const FProperty* TargetProp)
 	{
 		if (!SourceProp || !TargetProp) return false;

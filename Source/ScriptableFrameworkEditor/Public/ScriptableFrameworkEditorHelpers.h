@@ -23,6 +23,9 @@ namespace ScriptableFrameworkEditor
 	void GetScriptableCategory(const UClass* ScriptableClass, FName& ClassCategoryMeta, FName& PropertyCategoryMeta);
 	bool IsPropertyBindableOutput(const FProperty* Property);
 
+	/** Retrieves metadata from a property handle, bubbling up to parent handles if necessary. */
+	FString GetPropertyMetaData(const TSharedPtr<IPropertyHandle>& Handle, const FName& MetaDataKey);
+
 	/** Checks if two properties are compatible for binding. */
 	bool ArePropertiesCompatible(const FProperty* SourceProp, const FProperty* TargetProp);
 

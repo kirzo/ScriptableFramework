@@ -711,7 +711,7 @@ TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderExtensionCon
 					.BaseClass(GetBaseClass())
 					.ClassCategoryMeta(ClassCategory)
 					.FilterCategoryMeta(PropCategory)
-					.Filter(PropertyHandle->GetMetaData(PropCategory))
+					.Filter(ScriptableFrameworkEditor::GetPropertyMetaData(PropertyHandle, PropCategory))
 					.OnNodeTypePicked(SScriptableTypePicker::FOnNodeTypePicked::CreateSP(this, &FScriptableObjectCustomization::OnTypePicked))
 					.Content()
 					[
@@ -1029,6 +1029,7 @@ void FScriptableObjectCustomization::GeneratePickerMenu(class FMenuBuilder& InMe
 				.BaseClass(GetBaseClass())
 				.ClassCategoryMeta(ClassCategory)
 				.FilterCategoryMeta(PropCategory)
+				.Filter(ScriptableFrameworkEditor::GetPropertyMetaData(PropertyHandle, PropCategory))
 				.OnNodeTypePicked(SScriptableTypePicker::FOnNodeTypePicked::CreateSP(this, &FScriptableObjectCustomization::OnTypePicked))
 		];
 
