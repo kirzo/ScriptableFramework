@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "StructUtils/PropertyBag.h"
-#include "Utils/PropertyBagHelpers.h"
+#include "Core/KzPropertyBagHelpers.h"
 #include "ScriptableContainer.generated.h"
 
 class UScriptableObject;
@@ -48,19 +48,19 @@ public:
 	template <typename T>
 	void AddContextProperty(const FName& Name)
 	{
-		ScriptablePropertyBag::Add<T>(Context, Name);
+		KzPropertyBag::Add<T>(Context, Name);
 	}
 
 	template <typename T>
 	void SetContextProperty(const FName& Name, const T& Value)
 	{
-		ScriptablePropertyBag::Set(Context, Name, Value);
+		KzPropertyBag::Set(Context, Name, Value);
 	}
 
 	template <typename T>
 	T GetContextProperty(const FName& Name) const
 	{
-		auto Result = ScriptablePropertyBag::Get<T>(Context, Name);
+		auto Result = KzPropertyBag::Get<T>(Context, Name);
 		return Result.HasValue() ? Result.GetValue() : T();
 	}
 

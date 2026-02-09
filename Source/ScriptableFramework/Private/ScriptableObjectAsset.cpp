@@ -39,11 +39,11 @@ void UScriptableObjectAsset::RefreshContext()
 	if (FInstancedPropertyBag* ContextRef = GetContext())
 	{
 		ContextRef->Reset();
-		for (const FScriptableParameterDef& ScriptableParam : Context)
+		for (const FKzParamDef& Param : Context)
 		{
-			if (ScriptableParam.IsValid())
+			if (Param.IsValid())
 			{
-				ContextRef->AddContainerProperty(ScriptableParam.Name, ScriptableParam.ContainerType, ScriptableParam.ValueType, ScriptableParam.ValueTypeObject);
+				ContextRef->AddContainerProperty(Param.Name, Param.ContainerType, Param.ValueType, Param.ValueTypeObject);
 			}
 		}
 	}

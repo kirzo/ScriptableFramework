@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Bindings/ScriptableParameterDef.h"
+#include "Core/KzParamDef.h"
 #include "ScriptableObjectAsset.generated.h"
 
 /**
@@ -31,7 +31,7 @@ public:
 
 	/** Defines the context this asset expects. */
 	UPROPERTY(EditAnywhere, Category = "Config")
-	TArray<FScriptableParameterDef> Context;
+	TArray<FKzParamDef> Context;
 
 	virtual FInstancedPropertyBag* GetContext() PURE_VIRTUAL(UScriptableObjectAsset::GetContext(), return nullptr;)
 

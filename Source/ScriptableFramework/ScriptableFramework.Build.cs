@@ -11,7 +11,8 @@ public class ScriptableFramework : ModuleRules
 		PublicDependencyModuleNames.AddRange(
 			new string[] {
 				"Core",
-				"PropertyBindingUtils"
+				"PropertyBindingUtils",
+				"KzLib"
 			});
 
 
