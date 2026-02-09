@@ -15,6 +15,8 @@ FLinearColor FScriptableFrameworkEditorStyle::ScriptableConditionColor = FLinear
 FLinearColor FScriptableFrameworkEditorStyle::InactiveColor = FLinearColor(0.2f, 0.2f, 0.2f, 0.5f);
 FLinearColor FScriptableFrameworkEditorStyle::NegateColor = FLinearColor(0.8f, 0.1f, 0.1f);
 
+FLinearColor FScriptableFrameworkEditorStyle::ContextColor = FLinearColor(0.32f, 0.65f, 0.52f);
+
 void FScriptableFrameworkEditorStyle::Register()
 {
 	FSlateStyleRegistry::RegisterSlateStyle(Get());

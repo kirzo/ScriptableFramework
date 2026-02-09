@@ -63,6 +63,12 @@ protected:
 	TSharedPtr<IPropertyUtilities> PropertyUtilities;
 
 private:
+	/** Visibility callback for the Context button. */
+	EVisibility GetContextButtonVisibility() const;
+
+	/** Handler for the Context button click. */
+	FReply OnEditContextClicked();
+
 	/** Callback from Picker. */
 	void OnTypePicked(const UStruct* InStruct, const struct FAssetData& AssetData);
 

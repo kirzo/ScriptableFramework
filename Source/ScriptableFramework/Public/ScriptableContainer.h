@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "StructUtils/PropertyBag.h"
+#include "Core/KzParamDef.h"
 #include "Core/KzPropertyBagHelpers.h"
 #include "ScriptableContainer.generated.h"
 
@@ -16,8 +17,12 @@ struct SCRIPTABLEFRAMEWORK_API FScriptableContainer
 	GENERATED_BODY()
 
 public:
+	/** Defines the input parameters required by this container. */
+	UPROPERTY(EditAnywhere, Category = "Context", meta = (TitleProperty = "Name"))
+	TSet<FKzParamDef> ContextDefinitions;
+
 	/** Shared memory (Blackboard) for this scope. */
-	UPROPERTY(EditAnywhere, Category = "Config")
+	UPROPERTY(Transient)
 	FInstancedPropertyBag Context;
 
 protected:
@@ -45,10 +50,13 @@ public:
 		Context.Reset();
 	}
 
+	void ConstructContext();
+
 	template <typename T>
 	void AddContextProperty(const FName& Name)
 	{
-		KzPropertyBag::Add<T>(Context, Name);
+		ContextDefinitions.Add(FKzParamDef::Make<T>(Name));
+		ConstructContext();
 	}
 
 	template <typename T>

@@ -15,6 +15,8 @@ public:
 	static FLinearColor InactiveColor;
 	static FLinearColor NegateColor;
 
+	static FLinearColor ContextColor;
+
 protected:
 	friend class FScriptableFrameworkEditorModule;
 

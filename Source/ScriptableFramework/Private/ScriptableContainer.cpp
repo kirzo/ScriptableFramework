@@ -3,6 +3,30 @@
 #include "ScriptableContainer.h"
 #include "ScriptableObject.h"
 
+void FScriptableContainer::ConstructContext()
+{
+	ResetContext();
+
+	// Convert Definitions to Property Bag Descriptions
+	TArray<FPropertyBagPropertyDesc> Descs;
+
+	for (const FKzParamDef& Def : ContextDefinitions)
+	{
+		if (Def.Name.IsNone() || Def.ValueType == EPropertyBagPropertyType::None)
+		{
+			continue;
+		}
+
+		Descs.Add(Def.ToPropertyDesc());
+	}
+
+	// Rebuild the Bag
+	if (Descs.Num() > 0)
+	{
+		Context.AddProperties(Descs);
+	}
+}
+
 UScriptableObject* FScriptableContainer::FindBindingSource(const FGuid& InID) const
 {
 	if (const TObjectPtr<UScriptableObject>* Found = BindingSourceMap.Find(InID))
