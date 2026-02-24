@@ -21,6 +21,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "ScriptableFrameworkGAS",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "ScriptableFrameworkEditor",
 			"Type": "Editor",
 			"LoadingPhase": "PostEngineInit"
@@ -33,6 +38,10 @@
 		},
 		{
 			"Name": "PropertyBindingUtils",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayAbilities",
 			"Enabled": true
 		},
 		{
