@@ -12,7 +12,8 @@ public class ScriptableFrameworkEditor : ModuleRules
 			new string[] {
 				"ScriptableFramework",
 				"PropertyAccessEditor",
-				"PropertyBindingUtils"
+				"PropertyBindingUtils",
+				"KzLibEditor"
 			});
 
 		PrivateDependencyModuleNames.AddRange(
