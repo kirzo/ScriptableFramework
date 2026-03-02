@@ -13,6 +13,7 @@ void UScriptableTask_GrantAbility::BeginTask()
 		{
 			// Grant the ability and store the Handle
 			FGameplayAbilitySpec Spec(AbilityClass, 1, INDEX_NONE, nullptr);
+			Spec.GetDynamicSpecSourceTags() = DynamicTags;
 			GrantedHandle = ASC->GiveAbility(Spec);
 		}
 	}

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "GameplayAbilitySpecHandle.h"
+#include "GameplayTagContainer.h"
 #include "ScriptableTask_GrantAbility.generated.h"
 
 class UGameplayAbility;
@@ -23,6 +24,10 @@ public:
 	/** The Gameplay Ability class to grant. */
 	UPROPERTY(EditAnywhere, Category = "Ability")
 	TSubclassOf<UGameplayAbility> AbilityClass;
+
+	/** Dynamic tags to inject into the granted ability's spec source tags. */
+	UPROPERTY(EditAnywhere, Category = "Ability")
+	FGameplayTagContainer DynamicTags;
 
 	/** If true, calling Reset() on this task will remove the ability that was granted. */
 	UPROPERTY(EditAnywhere, Category = "Ability")
