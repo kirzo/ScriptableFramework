@@ -3,13 +3,12 @@
 #include "ScriptableTasks/AsyncRunScriptableAction.h"
 #include "ScriptableTasks/ScriptableTask.h"
 
-UAsyncRunScriptableAction* UAsyncRunScriptableAction::RunScriptableAction(UObject* Owner, FScriptableAction& Action, bool bReset)
+UAsyncRunScriptableAction* UAsyncRunScriptableAction::RunScriptableAction(UObject* Owner, FScriptableAction& Action)
 {
 	UAsyncRunScriptableAction* Node = NewObject<UAsyncRunScriptableAction>(Owner);
 
 	Node->ActionOwner = Owner;
 	Node->TargetAction = &Action;
-	Node->bShouldReset = bReset;
 
 	if (Owner)
 	{
@@ -29,16 +28,10 @@ void UAsyncRunScriptableAction::Activate()
 		return;
 	}
 
-	if (bShouldReset)
-	{
-		TargetAction->Reset();
-	}
-
 	TargetAction->OnActionFinish.RemoveAll(this);
 	TargetAction->OnActionFinish.AddUObject(this, &UAsyncRunScriptableAction::HandleActionFinished);
 
-	TargetAction->Register(ActionOwner);
-	TargetAction->Begin();
+	TargetAction->Run(ActionOwner);
 }
 
 void UAsyncRunScriptableAction::HandleActionFinished()
@@ -46,7 +39,7 @@ void UAsyncRunScriptableAction::HandleActionFinished()
 	if (TargetAction)
 	{
 		TargetAction->OnActionFinish.RemoveAll(this);
-		TargetAction->Unregister();
+		TargetAction->Reset();
 	}
 
 	OnFinish.Broadcast();

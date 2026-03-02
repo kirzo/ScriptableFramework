@@ -38,6 +38,19 @@ FScriptableAction FScriptableAction::Clone(UObject* NewOuter) const
 	return ClonedAction;
 }
 
+void FScriptableAction::Run(UObject* InOwner)
+{
+	if (!InOwner) return;
+
+	if (IsRunning())
+	{
+		Finish();
+	}
+
+	Register(InOwner);
+	Begin();
+}
+
 void FScriptableAction::Register(UObject* InOwner)
 {
 	Super::Register(InOwner);
@@ -93,6 +106,8 @@ void FScriptableAction::Reset()
 			Task->Reset();
 		}
 	}
+
+	Unregister();
 }
 
 void FScriptableAction::Begin()
@@ -169,17 +184,4 @@ void FScriptableAction::OnSubTaskFinished(UScriptableTask* Task)
 	{
 		BeginSubTask(Tasks[CurrentTaskIndex]);
 	}
-}
-
-void FScriptableAction::RunAction(UObject* Owner, FScriptableAction& Action)
-{
-	if (!Owner) return;
-
-	if (Action.IsRunning())
-	{
-		Action.Finish();
-	}
-
-	Action.Register(Owner);
-	Action.Begin();
 }

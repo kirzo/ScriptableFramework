@@ -31,6 +31,8 @@ struct SCRIPTABLEFRAMEWORK_API FScriptableAction : public FScriptableContainer
 {
 	GENERATED_BODY()
 
+	friend class UScriptableTask_RunAsset;
+
 public:
 	FScriptableAction();
 	~FScriptableAction();
@@ -71,6 +73,23 @@ public:
 	FScriptableAction Clone(UObject* NewOuter) const;
 
 	/**
+	 * Starts the execution of the action.
+	 * Registers tasks under the hood and begins the flow.
+	 * @param Owner The object responsible for running this action (e.g., a Component).
+	 */
+	void Run(UObject* Owner);
+
+	/**
+	 * Reverts the action's effects and cleans up memory.
+	 * Calls Reset on all tasks and unregisters them safely.
+	 */
+	void Reset();
+
+	/** Returns true if the action is currently executing. */
+	bool IsRunning() const { return bIsRunning; }
+
+private:
+	/**
 	 * Initializes the action and registers sub-tasks with the owner.
 	 * Populates the BindingSourceMap with the children tasks.
 	 */
@@ -79,22 +98,12 @@ public:
 	/** Cleans up tasks, unregisters them, and clears the Binding Map. */
 	void Unregister();
 
-	void Reset();
-
 	/** Starts the execution of the action. */
 	void Begin();
 
 	/** Finish the execution immediately. */
 	void Finish();
 
-	/** Returns true if the action is currently executing. */
-	bool IsRunning() const { return bIsRunning; }
-
-private:
 	void BeginSubTask(UScriptableTask* Task);
 	void OnSubTaskFinished(UScriptableTask* Task);
-
-public:
-	/** Static entry point to run an action. Handles registration and startup. */
-	static void RunAction(UObject* Owner, FScriptableAction& Action);
 };
