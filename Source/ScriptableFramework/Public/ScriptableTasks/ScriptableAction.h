@@ -64,6 +64,13 @@ private:
 	// -------------------------------------------------------------------
 public:
 	/**
+	 * Creates a deep copy of this action and all its sub-tasks.
+	 * @param NewOuter The object that will own the newly instanced tasks (usually the component running the action).
+	 * @return A fresh, un-registered copy of the action.
+	 */
+	FScriptableAction Clone(UObject* NewOuter) const;
+
+	/**
 	 * Initializes the action and registers sub-tasks with the owner.
 	 * Populates the BindingSourceMap with the children tasks.
 	 */

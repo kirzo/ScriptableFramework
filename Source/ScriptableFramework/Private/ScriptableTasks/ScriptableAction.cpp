@@ -11,6 +11,33 @@ FScriptableAction::~FScriptableAction()
 {
 }
 
+FScriptableAction FScriptableAction::Clone(UObject* NewOuter) const
+{
+	// 1. Shallow copy of the base properties (Context values, Mode, etc.)
+	FScriptableAction ClonedAction = *this;
+
+	// 2. Clear runtime state so the copy starts fresh
+	ClonedAction.bIsRunning = false;
+	ClonedAction.CurrentTaskIndex = 0;
+	ClonedAction.OnActionBegin.Clear();
+	ClonedAction.OnActionFinish.Clear();
+
+	// 3. Deep copy the Tasks array to avoid mutating the Data Asset
+	ClonedAction.Tasks.Empty(Tasks.Num());
+
+	for (UScriptableTask* Task : Tasks)
+	{
+		if (Task)
+		{
+			// DuplicateObject creates a real memory copy with NewOuter as the owner
+			UScriptableTask* ClonedTask = DuplicateObject<UScriptableTask>(Task, NewOuter);
+			ClonedAction.Tasks.Add(ClonedTask);
+		}
+	}
+
+	return ClonedAction;
+}
+
 void FScriptableAction::Register(UObject* InOwner)
 {
 	Super::Register(InOwner);
