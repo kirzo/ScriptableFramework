@@ -3,7 +3,6 @@
 #include "Tasks/ScriptableTask_GrantAbility.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
-#include "Abilities/GameplayAbility.h"
 
 void UScriptableTask_GrantAbility::BeginTask()
 {

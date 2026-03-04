@@ -4,11 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "ScriptableTasks/ScriptableTask.h"
+#include "Abilities/GameplayAbility.h"
 #include "GameplayAbilitySpecHandle.h"
 #include "GameplayTagContainer.h"
 #include "ScriptableTask_GrantAbility.generated.h"
-
-class UGameplayAbility;
 
 /** Grants a Gameplay Ability to the target actor. */
 UCLASS(DisplayName = "Grant Ability", meta = (TaskCategory = "Gameplay|Abilities"))

@@ -3,7 +3,6 @@
 #include "Conditions/ScriptableCondition_HasAbility.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
-#include "Abilities/GameplayAbility.h"
 
 bool UScriptableCondition_HasAbility::Evaluate_Implementation() const
 {

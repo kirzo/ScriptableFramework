@@ -4,10 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "ScriptableConditions/ScriptableCondition.h"
+#include "Abilities/GameplayAbility.h"
 #include "ScriptableCondition_HasAbility.generated.h"
-
-class UAbilitySystemComponent;
-class UGameplayAbility;
 
 /** Checks if a target actor or Ability System Component has a specific Gameplay Ability granted. */
 UCLASS(DisplayName = "Has Gameplay Ability", meta = (ConditionCategory = "Gameplay|Abilities"))
