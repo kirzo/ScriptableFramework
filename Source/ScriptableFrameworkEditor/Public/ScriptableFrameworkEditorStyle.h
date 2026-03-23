@@ -3,11 +3,12 @@
 #pragma once
 
 #include "Styling/SlateStyle.h"
+#include "KzEditorStyle_Base.h"
 
-class SCRIPTABLEFRAMEWORKEDITOR_API FScriptableFrameworkEditorStyle : public FSlateStyleSet
+class SCRIPTABLEFRAMEWORKEDITOR_API FScriptableFrameworkEditorStyle : public TKzEditorStyle_Base<FScriptableFrameworkEditorStyle>
 {
 public:
-	static FScriptableFrameworkEditorStyle& Get();
+	FScriptableFrameworkEditorStyle();
 
 	static FLinearColor ScriptableTaskColor;
 	static FLinearColor ScriptableConditionColor;
@@ -16,13 +17,4 @@ public:
 	static FLinearColor NegateColor;
 
 	static FLinearColor ContextColor;
-
-protected:
-	friend class FScriptableFrameworkEditorModule;
-
-	static void Register();
-	static void Unregister();
-
-private:
-	FScriptableFrameworkEditorStyle();
 };
