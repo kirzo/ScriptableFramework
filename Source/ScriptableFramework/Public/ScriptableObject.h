@@ -160,7 +160,7 @@ private:
 	const TMap<FGuid, TObjectPtr<UScriptableObject>>* BindingsMapRef = nullptr;
 
 	/** Unique identifier for bindings. Persists across duplication. */
-	UPROPERTY(DuplicateTransient, meta = (NoBinding))
+	UPROPERTY(meta = (NoBinding))
 	FGuid BindingID;
 	
 	/** Data bindings definition. */
