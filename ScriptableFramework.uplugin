@@ -27,6 +27,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "ScriptableFrameworkAI",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "ScriptableFrameworkEditor",
 			"Type": "Editor",
 			"LoadingPhase": "PostEngineInit"
@@ -43,6 +48,14 @@
 		},
 		{
 			"Name": "GameplayAbilities",
+			"Enabled": true
+		},
+		{
+			"Name": "StateTree",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayStateTree",
 			"Enabled": true
 		},
 		{
