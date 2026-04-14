@@ -57,6 +57,12 @@ void UScriptableObject::PostLoad()
 	}
 }
 
+void UScriptableObject::PostEditImport()
+{
+	Super::PostEditImport();
+	BindingID = FGuid::NewGuid();
+}
+
 #if WITH_EDITOR
 void UScriptableObject::PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent)
 {

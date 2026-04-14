@@ -25,6 +25,7 @@ public:
 
 	virtual void PostInitProperties() override;
 	virtual void PostLoad() override;
+	virtual void PostEditImport() override;
 	virtual UWorld* GetWorld() const override final { return (WorldPrivate ? WorldPrivate : GetWorld_Uncached()); }
 
 #if WITH_EDITOR

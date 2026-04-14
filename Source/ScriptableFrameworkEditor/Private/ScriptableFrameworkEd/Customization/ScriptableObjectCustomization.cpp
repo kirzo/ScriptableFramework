@@ -15,6 +15,8 @@
 #include "Widgets/SScriptableTypePicker.h"
 #include "PropertyCustomizationHelpers.h"
 
+#include "Utils/KzObjectEditorUtils.h"
+
 #include "DetailLayoutBuilder.h"
 #include "DetailCategoryBuilder.h"
 #include "DetailWidgetRow.h"
@@ -1043,163 +1045,32 @@ void FScriptableObjectCustomization::OnCopyNode()
 
 	if (Obj)
 	{
-		// Manually build the data string: (PropA=ValueA, PropB=ValueB)
-		FString DataString;
-		FStringOutputDevice Ar;
-		Ar.Log(TEXT("(")); // Start
-
-		const UObject* CDO = Obj->GetClass()->GetDefaultObject();
-		bool bFirst = true;
-
-		// Iterate over all class properties (including parents)
-		for (TFieldIterator<FProperty> It(Obj->GetClass()); It; ++It)
-		{
-			FProperty* Prop = *It;
-
-			// Ignore properties that shouldn't be copied (Transient, EditorOnly, etc.)
-			if (Prop->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_EditorOnly | CPF_Deprecated))
-			{
-				continue;
-			}
-
-			// Get pointers to current and default values (for delta export)
-			const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Obj);
-			const void* DefaultValuePtr = Prop->ContainerPtrToValuePtr<void>(CDO);
-
-			FString PropValue;
-			// Convert property value to text
-			if (Prop->ExportText_Direct(PropValue, ValuePtr, DefaultValuePtr, Obj, PPF_Copy | PPF_SimpleObjectText))
-			{
-				if (!PropValue.IsEmpty())
-				{
-					if (!bFirst) Ar.Log(TEXT(","));
-					// Format: PropName=Value
-					Ar.Logf(TEXT("%s=%s"), *Prop->GetName(), *PropValue);
-					bFirst = false;
-				}
-			}
-		}
-		Ar.Log(TEXT(")")); // End
-		DataString = Ar;
-
-		// Package with Class path
-		// Final format: ScriptableObject Class=/Path/To.Class Data=(...)
-		FString CopyStr = FString::Printf(TEXT("ScriptableObject Class=%s Data=%s"), *Obj->GetClass()->GetPathName(), *DataString);
-		FPlatformApplicationMisc::ClipboardCopy(*CopyStr);
+		FKzClipboardUtils::CopyObjectToClipboard(Obj);
 	}
 }
 
 void FScriptableObjectCustomization::OnPasteNode()
 {
-	FString PastedText;
-	FPlatformApplicationMisc::ClipboardPaste(PastedText);
-
-	if (PastedText.IsEmpty() || !PastedText.StartsWith("ScriptableObject")) return;
-
-	// Extract Class
-	FString ClassPath;
-	FParse::Value(*PastedText, TEXT("Class="), ClassPath);
-
-	// Resolve Class
-	UClass* ResolvedClass = LoadObject<UClass>(nullptr, *ClassPath);
-	if (!ResolvedClass) return;
-
-	FString DataString;
-	const FString DataKey = TEXT("Data=");
-	int32 DataIndex = PastedText.Find(DataKey);
-	if (DataIndex != INDEX_NONE)
-	{
-		DataString = PastedText.Mid(DataIndex + DataKey.Len()).TrimStartAndEnd();
-	}
-
-	// Type validation
-	UClass* BaseClass = GetBaseClass();
-	if (BaseClass && !ResolvedClass->IsChildOf(BaseClass))
-	{
-		FNotificationInfo Info(FText::Format(LOCTEXT("PasteTypeMismatch", "Cannot paste '{0}' here. Expected '{1}'."), ResolvedClass->GetDisplayNameText(), BaseClass->GetDisplayNameText()));
-		Info.ExpireDuration = 3.0f;
-		Info.Image = FAppStyle::GetBrush("Icons.Error");
-		FSlateNotificationManager::Get().AddNotification(Info);
-		return;
-	}
-
-	// Instantiate New Object
 	TArray<UObject*> OuterObjects;
 	PropertyHandle->GetOuterObjects(OuterObjects);
-	if (OuterObjects.IsEmpty()) return;
+	if (OuterObjects.IsEmpty() || !OuterObjects[0]) return;
 
-	UObject* NewInstance = NewObject<UObject>(OuterObjects[0], ResolvedClass, NAME_None, RF_Transactional | RF_Public);
+	UObject* NewInstance = FKzClipboardUtils::PasteObjectFromClipboard<UObject>(OuterObjects[0]);
 
-	// Manual Import
-	if (!DataString.IsEmpty() && NewInstance)
+	if (NewInstance)
 	{
-		// Iterate over new object properties
-		for (TFieldIterator<FProperty> It(ResolvedClass); It; ++It)
+		// Type validation
+		UClass* BaseClass = GetBaseClass();
+		if (BaseClass && !NewInstance->IsA(BaseClass))
 		{
-			FProperty* Prop = *It;
-			if (Prop->HasAnyPropertyFlags(CPF_EditorOnly | CPF_Deprecated)) continue;
+			FNotificationInfo Info(FText::Format(LOCTEXT("PasteTypeMismatch", "Cannot paste '{0}' here. Expected '{1}'."), NewInstance->GetClass()->GetDisplayNameText(), BaseClass->GetDisplayNameText()));
+			Info.ExpireDuration = 3.0f;
+			Info.Image = FAppStyle::GetBrush("Icons.Error");
+			FSlateNotificationManager::Get().AddNotification(Info);
 
-			FString ValStr;
-			FString SearchToken = Prop->GetName() + TEXT("=");
-			int32 TokenIdx = DataString.Find(SearchToken);
-
-			if (TokenIdx != INDEX_NONE)
-			{
-				// The value starts right after "PropName="
-				int32 ValueStartIdx = TokenIdx + SearchToken.Len();
-				int32 Cursor = ValueStartIdx;
-				int32 ParenCount = 0;
-				bool bInsideQuote = false;
-				int32 DataLen = DataString.Len();
-
-				// Scan forward to find the end of this value
-				while (Cursor < DataLen)
-				{
-					TCHAR Char = DataString[Cursor];
-
-					// Toggle quote state (ignoring escaped quotes)
-					if (Char == '"' && (Cursor == 0 || DataString[Cursor - 1] != '\\'))
-					{
-						bInsideQuote = !bInsideQuote;
-					}
-
-					if (!bInsideQuote)
-					{
-						if (Char == '(')
-						{
-							ParenCount++;
-						}
-						else if (Char == ')')
-						{
-							// If ParenCount is already 0 and we hit ')', it means we reached 
-							// the end of the entire DataString container (e.g., "...LastProp=Val)")
-							if (ParenCount == 0)
-							{
-								break;
-							}
-							ParenCount--;
-						}
-						else if (Char == ',' && ParenCount == 0)
-						{
-							// We found a comma at the root level, meaning this property value ended
-							break;
-						}
-					}
-
-					Cursor++;
-				}
-
-				// Extract the exact substring for this property
-				ValStr = DataString.Mid(ValueStartIdx, Cursor - ValueStartIdx);
-			}
-
-			if (!ValStr.IsEmpty())
-			{
-				void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(NewInstance);
-
-				// Apply text to memory value
-				Prop->ImportText_Direct(*ValStr, ValuePtr, NewInstance, PPF_Copy | PPF_SimpleObjectText);
-			}
+			NewInstance->ClearFlags(RF_Transactional);
+			NewInstance->MarkAsGarbage();
+			return;
 		}
 
 		// The bindings were pasted with the OLD object's StructID. 
