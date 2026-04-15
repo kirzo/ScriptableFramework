@@ -22,6 +22,8 @@
 #include "PropertyEditorModule.h"
 #include "IStructureDetailsView.h"
 
+#include "Engine/World.h"
+
 #define LOCTEXT_NAMESPACE "FScriptableContainerCustomization"
 
 void FScriptableContainerCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> PropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils)
@@ -187,11 +189,49 @@ FReply FScriptableContainerCustomization::OnModeClicked()
 
 EVisibility FScriptableContainerCustomization::GetContextButtonVisibility() const
 {
-	// Hide button if wrapped or if multiple items are selected (editing multiple containers context is tricky)
-	if ((StructHandle->GetNumPerObjectValues() > 1))
+	// Hide button if wrapped or if multiple items are selected
+	if (StructHandle->GetNumPerObjectValues() > 1)
 	{
 		return EVisibility::Collapsed;
 	}
+
+	TArray<UObject*> OuterObjects;
+	StructHandle->GetOuterObjects(OuterObjects);
+
+	for (UObject* OuterObj : OuterObjects)
+	{
+		bool bIsInsideAssetOrTemplate = false;
+		UObject* CurrentOuter = OuterObj;
+
+		// Traverse the ownership chain upwards until we hit the package
+		while (CurrentOuter && !CurrentOuter->IsA<UPackage>())
+		{
+			// A UWorld is technically an asset (.umap). We must intercept Levels and Worlds 
+			// before the IsAsset() check to correctly identify scene instances.
+			if (CurrentOuter->IsA<ULevel>() || CurrentOuter->IsA<UWorld>())
+			{
+				bIsInsideAssetOrTemplate = false;
+				break;
+			}
+
+			// If the current object or any of its parents is an Asset, CDO, or Archetype, we are safe
+			if (CurrentOuter->IsTemplate() || CurrentOuter->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject) || CurrentOuter->IsAsset())
+			{
+				bIsInsideAssetOrTemplate = true;
+				break;
+			}
+
+			// Move up to the next parent
+			CurrentOuter = CurrentOuter->GetOuter();
+		}
+
+		// If we hit a Level/World, or reached the root package without finding an Asset/CDO
+		if (!bIsInsideAssetOrTemplate)
+		{
+			return EVisibility::Collapsed;
+		}
+	}
+
 	return EVisibility::Visible;
 }
 
