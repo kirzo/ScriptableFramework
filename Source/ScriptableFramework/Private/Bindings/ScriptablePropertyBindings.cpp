@@ -1,8 +1,9 @@
-﻿// Copyright 2025 kirzo
+﻿// Copyright 2026 kirzo
 
 #include "Bindings/ScriptablePropertyBindings.h"
 #include "PropertyBindingDataView.h"
 #include "ScriptableObject.h"
+#include "StructUtils/PropertyBag.h"
 
 #if WITH_EDITOR
 void FScriptablePropertyBindings::AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath)
@@ -101,6 +102,88 @@ const FPropertyBindingPath* FScriptablePropertyBindings::GetPropertyBinding(cons
 }
 #endif
 
+// ------------------------------------------------------------------------------------------------
+// Helper to resolve paths manually, bypassing Unreal's native black-box function.
+// This supports diving into FInstancedPropertyBags no matter what parent struct they live inside.
+// ------------------------------------------------------------------------------------------------
+static bool ResolveIndirections(const FPropertyBindingPath& Path, const FPropertyBindingDataView& View, const FProperty*& OutProp, void*& OutAddr)
+{
+	if (!View.IsValid() || Path.IsPathEmpty()) return false;
+
+	const UStruct* CurrentStruct = View.GetStruct();
+	void* CurrentAddr = View.GetMutableMemory();
+
+	for (int32 i = 0; i < Path.NumSegments(); ++i)
+	{
+		const FPropertyBindingPathSegment& Segment = Path.GetSegment(i);
+
+		// Find the property in the current struct context
+		const FProperty* Prop = CurrentStruct->FindPropertyByName(Segment.GetName());
+		if (!Prop) return false; // Path is broken
+
+		// Advance the memory pointer to this property
+		void* PropAddr = Prop->ContainerPtrToValuePtr<void>(CurrentAddr);
+
+		// Handle Array indices if this segment targets an element
+		if (Segment.GetArrayIndex() != INDEX_NONE)
+		{
+			if (const FArrayProperty* ArrayProp = CastField<FArrayProperty>(Prop))
+			{
+				FScriptArrayHelper Helper(ArrayProp, PropAddr);
+				if (!Helper.IsValidIndex(Segment.GetArrayIndex())) return false;
+				PropAddr = Helper.GetRawPtr(Segment.GetArrayIndex());
+				Prop = ArrayProp->Inner;
+			}
+			else return false;
+		}
+
+		// If this is the final segment in the path, we have our target
+		if (i == Path.NumSegments() - 1)
+		{
+			OutProp = Prop;
+			OutAddr = PropAddr;
+			return true;
+		}
+
+		// If not the last segment, prepare CurrentStruct and CurrentAddr for the next loop iteration
+		if (const FStructProperty* StructProp = CastField<FStructProperty>(Prop))
+		{
+			// MAGIC: Generic detection of ANY InstancedPropertyBag hidden inside any struct
+			if (StructProp->Struct->GetFName() == TEXT("InstancedPropertyBag"))
+			{
+				FInstancedPropertyBag* Bag = static_cast<FInstancedPropertyBag*>(PropAddr);
+				if (!Bag || !Bag->IsValid()) return false;
+
+				// Swap our context to the dynamic struct and dynamic memory of the bag
+				CurrentStruct = Bag->GetPropertyBagStruct();
+				CurrentAddr = Bag->GetMutableValue().GetMemory();
+			}
+			else
+			{
+				// Standard struct traversal
+				CurrentStruct = StructProp->Struct;
+				CurrentAddr = PropAddr;
+			}
+		}
+		else if (const FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(Prop))
+		{
+			UObject* Obj = ObjProp->GetObjectPropertyValue(PropAddr);
+			if (!Obj) return false;
+
+			// Standard UObject traversal
+			CurrentStruct = Obj->GetClass();
+			CurrentAddr = Obj;
+		}
+		else
+		{
+			// We hit a primitive type but the path still has more segments (invalid path)
+			return false;
+		}
+	}
+
+	return false;
+}
+
 void FScriptablePropertyBindings::ResolveBindings(UScriptableObject* TargetObject)
 {
 	if (!TargetObject) return;
@@ -152,19 +235,17 @@ void FScriptablePropertyBindings::ResolveBindings(UScriptableObject* TargetObjec
 
 void FScriptablePropertyBindings::CopySingleBinding(const FScriptablePropertyBinding& Binding, const FPropertyBindingDataView& SrcView, const FPropertyBindingDataView& DestView)
 {
-	TArray<FPropertyBindingPathIndirection> SourceIndirections;
-	if (!Binding.SourcePath.ResolveIndirectionsWithValue(SrcView, SourceIndirections)) return;
+	const FProperty* SourceProp = nullptr;
+	void* SourceAddr = nullptr;
 
-	TArray<FPropertyBindingPathIndirection> TargetIndirections;
-	if (!Binding.TargetPath.ResolveIndirectionsWithValue(DestView, TargetIndirections)) return;
+	// Path resolution for the Source
+	if (!ResolveIndirections(Binding.SourcePath, SrcView, SourceProp, SourceAddr)) return;
 
-	const FPropertyBindingPathIndirection& SourceLeaf = SourceIndirections.Last();
-	const FPropertyBindingPathIndirection& TargetLeaf = TargetIndirections.Last();
+	const FProperty* TargetProp = nullptr;
+	void* TargetAddr = nullptr;
 
-	const FProperty* SourceProp = SourceLeaf.GetProperty();
-	const FProperty* TargetProp = TargetLeaf.GetProperty();
-	const void* SourceAddr = SourceLeaf.GetPropertyAddress();
-	void* TargetAddr = TargetLeaf.GetMutablePropertyAddress();
+	// Path resolution for the Target
+	if (!ResolveIndirections(Binding.TargetPath, DestView, TargetProp, TargetAddr)) return;
 
 	if (SourceProp && TargetProp && SourceAddr && TargetAddr)
 	{
