@@ -30,6 +30,7 @@ public:
 	bool bForceRestart = true;
 
 protected:
+	virtual void PreResolveBindings() override;
 	virtual void BeginTask() override;
 
 #if WITH_EDITOR

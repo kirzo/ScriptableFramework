@@ -6,6 +6,37 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
 
+void UScriptableTask_RunStateTree::PreResolveBindings()
+{
+	Super::PreResolveBindings();
+
+	// 1. Ensure the property bag structure is available
+	const UPropertyBag* BagStruct = StateTree.GetParameters().GetPropertyBagStruct();
+	if (BagStruct)
+	{
+		// 2. Scan all bindings in this task to find which ones target the StateTree
+		for (const FScriptablePropertyBinding& Binding : GetPropertyBindings().Bindings)
+		{
+			// Check if the binding path targets the StateTree (e.g., "StateTree.Parameters.MyFloat")
+			if (Binding.TargetPath.NumSegments() > 0 && Binding.TargetPath.GetSegment(0).GetName() == TEXT("StateTree"))
+			{
+				// Get the name of the dynamic variable (the last segment of the path e.g., "MyFloat")
+				const FName ParamName = Binding.TargetPath.GetSegment(Binding.TargetPath.NumSegments() - 1).GetName();
+
+				// Find its GUID ID inside the PropertyBag
+				if (const FPropertyBagPropertyDesc* Desc = BagStruct->FindPropertyDescByName(ParamName))
+				{
+					// 3. Mark it as overridden so StateTree DOES NOT wipe our value during Sync
+					StateTree.SetPropertyOverridden(Desc->ID, true);
+				}
+			}
+		}
+	}
+
+	// 4. Force the StateTree to prepare its memory now that it knows what's overridden
+	StateTree.GetParameters();
+}
+
 void UScriptableTask_RunStateTree::BeginTask()
 {
 	if (IsValid(TargetActor) && StateTree.IsValid())
