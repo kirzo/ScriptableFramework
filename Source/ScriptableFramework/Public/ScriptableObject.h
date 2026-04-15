@@ -138,8 +138,8 @@ public:
 #if WITH_EDITOR
 	/** Accessor for the editor module to modify bindings directly. */
 	FScriptablePropertyBindings& GetPropertyBindings() { return PropertyBindings; }
-	const FScriptablePropertyBindings& GetPropertyBindings() const { return PropertyBindings; }
 #endif
+	const FScriptablePropertyBindings& GetPropertyBindings() const { return PropertyBindings; }
 
 	// -------------------------------------------------------------------
 	//  Member Variables
