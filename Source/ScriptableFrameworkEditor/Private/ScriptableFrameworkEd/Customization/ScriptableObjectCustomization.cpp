@@ -739,19 +739,40 @@ public:
 
 	virtual void GenerateHeaderRowContent(FDetailWidgetRow& NodeRow) override
 	{
+		// Do not draw the header if there are no dynamic parameters
 		if (!HasAnyProperties()) return;
+
+		FText DynamicTitle;
+
+		// Check if the Bag is nested inside another struct (e.g., Parent="StateTree", Bag="Parameters")
+		if (ParentHandle->GetProperty() != BagHandle->GetProperty())
+		{
+			DynamicTitle = FText::Format(
+				LOCTEXT("DynamicNestedBindingsFormat", "Dynamic {0} {1} Bindings"),
+				ParentHandle->GetPropertyDisplayName(),
+				BagHandle->GetPropertyDisplayName()
+			);
+		}
+		else
+		{
+			// Direct PropertyBag case (e.g., just "MyBag" directly on the object)
+			DynamicTitle = FText::Format(
+				LOCTEXT("DynamicDirectBindingsFormat", "Dynamic {0} Bindings"),
+				BagHandle->GetPropertyDisplayName()
+			);
+		}
 
 		NodeRow.NameContent()
 			[
 				SNew(STextBlock)
-					.Text(LOCTEXT("DynamicBindingsLabel", "Dynamic Parameter Bindings"))
+					.Text(DynamicTitle)
 					.Font(FAppStyle::GetFontStyle("PropertyWindow.BoldFont"))
 			];
 	}
 
 	virtual void GenerateChildContent(IDetailChildrenBuilder& ChildrenBuilder) override
 	{
-		if (!Obj) return;
+		if (!Obj || !HasAnyProperties()) return;
 
 		// Extract the raw FInstancedPropertyBag memory
 		void* Data = nullptr;
