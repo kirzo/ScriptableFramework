@@ -12,6 +12,7 @@ class IPropertyUtilities;
 class UScriptableObject;
 class IDetailPropertyRow;
 struct FAssetData;
+struct FPropertyBindingBindableStructDescriptor;
 
 /**
  * Base customization for UScriptableObject.
@@ -29,6 +30,10 @@ public:
 
 	/** Initializes handles and cached data. Call this if overriding CustomizeHeader completely. */
 	virtual void InitCustomization(TSharedRef<IPropertyHandle> InPropertyHandle, IPropertyTypeCustomizationUtils& CustomizationUtils);
+
+	TSharedPtr<IPropertyUtilities> GetPropertyUtilities() const { return PropertyUtilities; }
+
+	void ProcessPropertyHandle(TSharedRef<IPropertyHandle> SubPropertyHandle, IDetailChildrenBuilder& ChildBuilder, UScriptableObject* Obj, const TArray<FPropertyBindingBindableStructDescriptor>& AccessibleStructs);
 
 	// --- Overridable Extension Points ---
 
