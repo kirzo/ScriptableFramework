@@ -376,6 +376,7 @@ void UScriptableObject::PropagateRuntimeData(UScriptableObject* Child) const
 
 void UScriptableObject::ResolveBindings()
 {
+	PreResolveBindings();
 	PropertyBindings.ResolveBindings(this);
 }
 

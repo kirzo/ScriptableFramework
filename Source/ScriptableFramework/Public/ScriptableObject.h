@@ -107,6 +107,13 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = Tick, meta = (DisplayName = "Tick"))
 	void ReceiveTick(float DeltaSeconds);
 
+	/**
+	 * Hook called immediately before property bindings are resolved.
+	 * Override this in child tasks to prepare or sync dynamic memory (like PropertyBags)
+	 * so the binding resolver finds the correct target addresses.
+	 */
+	virtual void PreResolveBindings() {}
+
 	// -------------------------------------------------------------------
 	//  Data Binding & Context
 	// -------------------------------------------------------------------
