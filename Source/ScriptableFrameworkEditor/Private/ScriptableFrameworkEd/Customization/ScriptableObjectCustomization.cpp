@@ -778,7 +778,7 @@ void FScriptableObjectCustomization::ProcessPropertyHandle(TSharedRef<IPropertyH
 		return;
 	}
 
-	if (Obj && IsPropertyExtendable(SubPropertyHandle))
+	if (Obj && ScriptableFrameworkEditor::IsPropertyExtendable(SubPropertyHandle))
 	{
 		const FProperty* Prop = SubPropertyHandle->GetProperty();
 
@@ -1550,34 +1550,11 @@ void FScriptableObjectCustomization::HandleForceRefresh()
 // General Binding & Children Logic
 // ------------------------------------------------------------------------------------------------
 
-bool FScriptableObjectCustomization::IsPropertyExtendable(TSharedPtr<IPropertyHandle> InPropertyHandle) const
-{
-	const FProperty* Property = InPropertyHandle->GetProperty();
-	if (!Property || Property->HasAnyPropertyFlags(CPF_PersistentInstance | CPF_EditorOnly | CPF_Config | CPF_Deprecated)) return false;
-
-	// Filter out internal framework properties
-	if (Property->HasMetaData(TEXT("NoBinding")))
-	{
-		return false;
-	}
-
-	// Filter out Container types (Sets, Maps).
-	// The custom binding logic wraps the property widget in a custom row, which breaks 
-	// the native header logic of containers (causing duplicate 'Add' buttons or preventing expansion).
-	// We let Unreal handle these natively by returning false.
-	if (Property->IsA<FSetProperty>() || Property->IsA<FMapProperty>())
-	{
-		return false;
-	}
-
-	return true;
-}
-
 void FScriptableObjectCustomization::GenerateArrayElement(TSharedRef<IPropertyHandle> ChildHandle, int32 ArrayIndex, IDetailChildrenBuilder& ChildrenBuilder)
 {
 	if (UScriptableObject* Obj = ScriptableObject.Get())
 	{
-		if (IsPropertyExtendable(ChildHandle))
+		if (ScriptableFrameworkEditor::IsPropertyExtendable(ChildHandle))
 		{
 			TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
 			ScriptableFrameworkEditor::GetAccessibleStructs(Obj, ChildHandle, AccessibleStructs);

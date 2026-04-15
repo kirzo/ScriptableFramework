@@ -47,9 +47,6 @@ protected:
 	/** Returns the base class allowed for this property (e.g., UScriptableTask, UScriptableCondition, or UScriptableObject). */
 	UClass* GetBaseClass() const;
 
-	/** Determines if a child property supports binding (skips Arrays/Maps/Sets and metadata "NoBinding"). */
-	bool IsPropertyExtendable(TSharedPtr<IPropertyHandle> InPropertyHandle) const;
-
 	/** Returns the class of the wrapper task/condition (e.g. UScriptableTask_RunAsset). */
 	virtual UClass* GetWrapperClass() const = 0;
 

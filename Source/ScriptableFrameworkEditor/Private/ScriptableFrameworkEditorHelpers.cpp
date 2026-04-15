@@ -78,6 +78,26 @@ namespace ScriptableFrameworkEditor
 		return true;
 	}
 
+	bool IsPropertyExtendable(TSharedPtr<IPropertyHandle> InPropertyHandle)
+	{
+		const FProperty* Property = InPropertyHandle->GetProperty();
+		if (!Property || Property->HasAnyPropertyFlags(CPF_PersistentInstance | CPF_EditorOnly | CPF_Config | CPF_Deprecated)) return false;
+
+		// Filter out internal framework properties
+		if (Property->HasMetaData(TEXT("NoBinding")))
+		{
+			return false;
+		}
+
+		// Filter containers. Native UI handles them, we only extend elements.
+		if (Property->IsA<FSetProperty>() || Property->IsA<FMapProperty>())
+		{
+			return false;
+		}
+
+		return true;
+	}
+
 	void GetScriptableCategory(const UClass* ScriptableClass, FName& ClassCategoryMeta, FName& PropertyCategoryMeta)
 	{
 		if (ScriptableClass->IsChildOf(UScriptableTask::StaticClass()))

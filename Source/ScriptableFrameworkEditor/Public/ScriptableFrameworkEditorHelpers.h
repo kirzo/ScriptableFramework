@@ -20,6 +20,7 @@ namespace ScriptableFrameworkEditor
 	static const FName MD_ConditionCategories = TEXT("ConditionCategories");
 
 	bool IsPropertyVisible(TSharedRef<IPropertyHandle> PropertyHandle);
+	bool IsPropertyExtendable(TSharedPtr<IPropertyHandle> InPropertyHandle);
 	void GetScriptableCategory(const UClass* ScriptableClass, FName& ClassCategoryMeta, FName& PropertyCategoryMeta);
 	bool IsPropertyBindableOutput(const FProperty* Property);
 
