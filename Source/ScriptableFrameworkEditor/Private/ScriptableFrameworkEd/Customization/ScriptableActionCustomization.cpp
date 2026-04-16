@@ -33,6 +33,11 @@ FText FScriptableActionCustomization::GetAddButtonTooltip() const
 	return LOCTEXT("AddTaskTooltip", "Add new Task.");
 }
 
+FText FScriptableActionCustomization::GetRemoveButtonTooltip() const
+{
+	return LOCTEXT("RemoveTasksTooltip", "Remove all Tasks.");
+}
+
 UClass* FScriptableActionCustomization::GetWrapperClass() const
 {
 	return UScriptableTask_RunAsset::StaticClass();

@@ -148,8 +148,25 @@ TSharedPtr<SHorizontalBox> FScriptableContainerCustomization::GetHeaderExtension
 	+ SHorizontalBox::Slot()
 		.AutoWidth()
 		.VAlign(VAlign_Center)
+		.Padding(0, 0, 4, 0)
 		[
 			AddComboButton.ToSharedRef()
+		]
+	// Remove All Button
+	+ SHorizontalBox::Slot()
+		.AutoWidth()
+		.VAlign(VAlign_Center)
+		[
+			SNew(SButton)
+				.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+				.OnClicked(this, &FScriptableContainerCustomization::OnClearClicked)
+				.ToolTipText(GetRemoveButtonTooltip())
+				.ContentPadding(FMargin(2.0f, 0.0f))
+				[
+					SNew(SImage)
+						.ColorAndOpacity(FSlateColor::UseForeground())
+						.Image(FAppStyle::Get().GetBrush("Icons.Delete"))
+				]
 		];
 }
 
@@ -167,6 +184,38 @@ void FScriptableContainerCustomization::OnGenerateElement(TSharedRef<IPropertyHa
 {
 	IDetailPropertyRow& Row = Builder.AddProperty(ElementHandle);
 	Row.ShowPropertyButtons(false);
+}
+
+FReply FScriptableContainerCustomization::OnClearClicked()
+{
+	ClearElements();
+	return FReply::Handled();
+}
+
+void FScriptableContainerCustomization::ClearElements()
+{
+	if (ListHandle.IsValid() && ListHandle->AsArray().IsValid())
+	{
+		uint32 NumElements = 0;
+		ListHandle->AsArray()->GetNumElements(NumElements);
+
+		// Only perform the transaction and empty the array if there are elements to remove
+		if (NumElements > 0)
+		{
+			FScopedTransaction Transaction(LOCTEXT("ClearElements", "Clear Container Elements"));
+
+			StructHandle->NotifyPreChange();
+
+			ListHandle->AsArray()->EmptyArray();
+
+			StructHandle->NotifyPostChange(EPropertyChangeType::ArrayClear);
+
+			if (PropertyUtilities.IsValid())
+			{
+				PropertyUtilities->ForceRefresh();
+			}
+		}
+	}
 }
 
 FReply FScriptableContainerCustomization::OnModeClicked()

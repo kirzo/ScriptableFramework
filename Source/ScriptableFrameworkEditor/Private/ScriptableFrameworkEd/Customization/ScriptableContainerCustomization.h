@@ -43,6 +43,9 @@ protected:
 	/** Tooltip for the Add button. */
 	virtual FText GetAddButtonTooltip() const = 0;
 
+	/** Tooltip for the Remove button. */
+	virtual FText GetRemoveButtonTooltip() const = 0;
+
 	// --- Wrapper Configuration ---
 
 	/** Returns the class of the wrapper task/condition (e.g. UScriptableTask_RunAsset). */
@@ -83,4 +86,10 @@ private:
 
 	/** Array Row Generator. */
 	void OnGenerateElement(TSharedRef<IPropertyHandle> ElementHandle, int32 Index, IDetailChildrenBuilder& Builder);
+
+	/** Handles the clear/remove button click to empty the container. */
+	FReply OnClearClicked();
+
+	/** Clear the container. */
+	void ClearElements();
 };

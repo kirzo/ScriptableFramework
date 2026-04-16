@@ -18,6 +18,7 @@ protected:
 	virtual FName GetModePropertyName() const override;
 	virtual FSlateColor GetIconColor() const override;
 	virtual FText GetAddButtonTooltip() const override;
+	virtual FText GetRemoveButtonTooltip() const override;
 
 	virtual UClass* GetWrapperClass() const override;
 

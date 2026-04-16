@@ -65,6 +65,11 @@ FText FScriptableRequirementCustomization::GetAddButtonTooltip() const
 	return LOCTEXT("AddConditionTooltip", "Add new Condition.");
 }
 
+FText FScriptableRequirementCustomization::GetRemoveButtonTooltip() const
+{
+	return LOCTEXT("RemoveConditionsTooltip", "Remove all Conditions.");
+}
+
 UClass* FScriptableRequirementCustomization::GetWrapperClass() const
 {
 	return UScriptableCondition_Asset::StaticClass();
