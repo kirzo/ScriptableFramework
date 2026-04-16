@@ -58,4 +58,14 @@ namespace ScriptableFrameworkEditor
 
 	// Collect siblings using Editor Handles (works for Struct Arrays)
 	void CollectSiblingsFromHandle(TSharedPtr<IPropertyHandle> ObjectHandle, TArray<const UScriptableObject*>& OutObjects);
+
+	/**
+	 * Scans the provided accessible contexts to find a suitable automatic binding
+	 * for properties marked in the "Context" category.
+	 * @param TargetProperty The property requesting the auto-binding.
+	 * @param AccessibleStructs The list of available contexts to search within.
+	 * @param OutPath The resulting path if a compatible property is found.
+	 * @return True if a compatible binding was discovered, false otherwise.
+	 */
+	bool TryDiscoverAutoBinding(const FProperty* TargetProperty, const TArray<FPropertyBindingBindableStructDescriptor>& AccessibleStructs, FPropertyBindingPath& OutPath);
 }

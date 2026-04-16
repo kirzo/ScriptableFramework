@@ -484,4 +484,65 @@ namespace ScriptableFrameworkEditor
 			}
 		}
 	}
+
+	bool TryDiscoverAutoBinding(const FProperty* TargetProperty, const TArray<FPropertyBindingBindableStructDescriptor>& AccessibleStructs, FPropertyBindingPath& OutPath)
+	{
+		if (!TargetProperty)
+		{
+			return false;
+		}
+
+		// Only attempt auto-binding for properties explicitly marked in the "Context" category.
+		const FString CategoryMeta = TargetProperty->GetMetaData(TEXT("Category"));
+		if (!CategoryMeta.Contains(TEXT("Context")))
+		{
+			return false;
+		}
+
+		// Search through all available contexts (Global, Local, Owner, etc.)
+		for (const FPropertyBindingBindableStructDescriptor& ContextDesc : AccessibleStructs)
+		{
+			const UStruct* Struct = ContextDesc.Struct.Get();
+			if (!Struct)
+			{
+				continue;
+			}
+
+			// This handles cases where both the ScriptableObject and Context have a property with the same name
+			if (const FProperty* ExactMatchProp = Struct->FindPropertyByName(TargetProperty->GetFName()))
+			{
+				if (ArePropertiesCompatible(ExactMatchProp, TargetProperty))
+				{
+					OutPath.Reset();
+					OutPath.SetStructID(ContextDesc.ID);
+					OutPath.AddPathSegment(ExactMatchProp->GetFName());
+					return true;
+				}
+			}
+
+			// This handles your edge case: Context has "Owner" (AActor*) and Task asks for "TargetActor" (AActor*)
+			for (TFieldIterator<FProperty> It(Struct); It; ++It)
+			{
+				const FProperty* SourceProp = *It;
+
+				// Skip the exact name match since we already tested it above
+				if (SourceProp->GetFName() == TargetProperty->GetFName())
+				{
+					continue;
+				}
+
+				// First property that satisfies the strict type compatibility wins
+				if (ArePropertiesCompatible(SourceProp, TargetProperty))
+				{
+					OutPath.Reset();
+					OutPath.SetStructID(ContextDesc.ID);
+					OutPath.AddPathSegment(SourceProp->GetFName());
+					return true;
+				}
+			}
+		}
+
+		// No compatible property was found in any of the accessible contexts
+		return false;
+	}
 }
