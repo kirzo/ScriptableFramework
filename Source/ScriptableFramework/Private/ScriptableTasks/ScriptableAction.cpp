@@ -114,7 +114,7 @@ void FScriptableAction::Begin()
 {
 	if (Tasks.IsEmpty())
 	{
-		bIsRunning = false;
+		Finish(true);
 		return;
 	}
 
@@ -136,9 +136,9 @@ void FScriptableAction::Begin()
 	OnActionBegin.Broadcast();
 }
 
-void FScriptableAction::Finish()
+void FScriptableAction::Finish(bool bForce)
 {
-	if (!bIsRunning) return;
+	if (!bIsRunning && !bForce) return;
 
 	for (UScriptableTask* Task : Tasks)
 	{

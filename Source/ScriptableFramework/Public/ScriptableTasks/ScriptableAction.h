@@ -102,7 +102,7 @@ private:
 	void Begin();
 
 	/** Finish the execution immediately. */
-	void Finish();
+	void Finish(bool bForce = false);
 
 	void BeginSubTask(UScriptableTask* Task);
 	void OnSubTaskFinished(UScriptableTask* Task);
