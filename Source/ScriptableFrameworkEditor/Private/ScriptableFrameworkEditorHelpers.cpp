@@ -391,6 +391,252 @@ namespace ScriptableFrameworkEditor
 		}
 	}
 
+	void GetAccessibleStructs_Headless(const UScriptableObject* TargetObject, TArray<FPropertyBindingBindableStructDescriptor>& OutStructDescs)
+	{
+		if (!TargetObject) return;
+		const UScriptableObject* RootObject = TargetObject->GetRoot();
+		if (!RootObject) return;
+
+		// =======================================================================================
+		// LAMBDA 1: Reflection Helper to find the FScriptableContainer holding a specific Node
+		// =======================================================================================
+		auto FindContainerForNode = [](const UObject* Node) -> const FScriptableContainer*
+			{
+				if (!Node) return nullptr;
+				const UObject* Owner = Node->GetOuter();
+				if (!Owner) return nullptr;
+
+				const UScriptStruct* BaseContainerStruct = FScriptableContainer::StaticStruct();
+
+				// Iterate through all properties of the Owner
+				for (TFieldIterator<FProperty> It(Owner->GetClass()); It; ++It)
+				{
+					// CASE A: Direct Struct Property (e.g., FScriptableAction MyAction;)
+					if (const FStructProperty* StructProp = CastField<FStructProperty>(*It))
+					{
+						if (StructProp->Struct->IsChildOf(BaseContainerStruct))
+						{
+							const FScriptableContainer* Container = StructProp->ContainerPtrToValuePtr<FScriptableContainer>(Owner);
+
+							// Reflect inside the container to see if it holds our Node
+							for (TFieldIterator<FProperty> InnerIt(StructProp->Struct); InnerIt; ++InnerIt)
+							{
+								if (const FArrayProperty* ArrayProp = CastField<FArrayProperty>(*InnerIt))
+								{
+									if (const FObjectProperty* ObjProp = CastField<FObjectProperty>(ArrayProp->Inner))
+									{
+										FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Container));
+										for (int32 i = 0; i < Helper.Num(); ++i)
+										{
+											if (ObjProp->GetObjectPropertyValue(Helper.GetRawPtr(i)) == Node) return Container;
+										}
+									}
+								}
+								else if (const FObjectProperty* ObjProp = CastField<FObjectProperty>(*InnerIt))
+								{
+									if (ObjProp->GetObjectPropertyValue_InContainer(Container) == Node) return Container;
+								}
+							}
+						}
+					}
+					// CASE B: Array of Structs (e.g., TArray<FScriptableRequirement> Requirements;)
+					else if (const FArrayProperty* ArrayProp = CastField<FArrayProperty>(*It))
+					{
+						if (const FStructProperty* InnerStructProp = CastField<FStructProperty>(ArrayProp->Inner))
+						{
+							if (InnerStructProp->Struct->IsChildOf(BaseContainerStruct))
+							{
+								FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Owner));
+								for (int32 Index = 0; Index < Helper.Num(); ++Index)
+								{
+									const FScriptableContainer* Container = reinterpret_cast<const FScriptableContainer*>(Helper.GetRawPtr(Index));
+
+									for (TFieldIterator<FProperty> InnerIt(InnerStructProp->Struct); InnerIt; ++InnerIt)
+									{
+										if (const FArrayProperty* InnerArrayProp = CastField<FArrayProperty>(*InnerIt))
+										{
+											if (const FObjectProperty* ObjProp = CastField<FObjectProperty>(InnerArrayProp->Inner))
+											{
+												FScriptArrayHelper InnerHelper(InnerArrayProp, InnerArrayProp->ContainerPtrToValuePtr<void>(Container));
+												for (int32 i = 0; i < InnerHelper.Num(); ++i)
+												{
+													if (ObjProp->GetObjectPropertyValue(InnerHelper.GetRawPtr(i)) == Node) return Container;
+												}
+											}
+										}
+										else if (const FObjectProperty* ObjProp = CastField<FObjectProperty>(*InnerIt))
+										{
+											if (ObjProp->GetObjectPropertyValue_InContainer(Container) == Node) return Container;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				return nullptr;
+			};
+
+		// =======================================================================================
+		// LAMBDA 2: Reflection Helper to collect previous siblings purely from memory arrays
+		// =======================================================================================
+		auto CollectSiblingsHeadless = [](const UObject* Node, TArray<const UScriptableObject*>& OutSiblings)
+			{
+				if (!Node) return;
+				const UObject* Owner = Node->GetOuter();
+				if (!Owner) return;
+
+				for (TFieldIterator<FProperty> It(Owner->GetClass()); It; ++It)
+				{
+					if (const FArrayProperty* ArrayProp = CastField<FArrayProperty>(*It))
+					{
+						// Array of Objects (TArray<UScriptableObject*>)
+						if (const FObjectProperty* ObjProp = CastField<FObjectProperty>(ArrayProp->Inner))
+						{
+							FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Owner));
+							int32 TargetIndex = INDEX_NONE;
+
+							for (int32 i = 0; i < Helper.Num(); ++i)
+							{
+								if (ObjProp->GetObjectPropertyValue(Helper.GetRawPtr(i)) == Node)
+								{
+									TargetIndex = i;
+									break;
+								}
+							}
+
+							if (TargetIndex != INDEX_NONE)
+							{
+								for (int32 i = 0; i < TargetIndex; ++i)
+								{
+									if (const UScriptableObject* PrevSibling = Cast<UScriptableObject>(ObjProp->GetObjectPropertyValue(Helper.GetRawPtr(i))))
+									{
+										OutSiblings.Add(PrevSibling);
+									}
+								}
+								return; // Found the array holding our node, we can stop searching
+							}
+						}
+						// Array of Containers (TArray<FScriptableContainer>)
+						else if (const FStructProperty* InnerStructProp = CastField<FStructProperty>(ArrayProp->Inner))
+						{
+							if (InnerStructProp->Struct->IsChildOf(FScriptableContainer::StaticStruct()))
+							{
+								FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Owner));
+								for (int32 Index = 0; Index < Helper.Num(); ++Index)
+								{
+									const void* ContainerMemory = Helper.GetRawPtr(Index);
+									for (TFieldIterator<FProperty> InnerIt(InnerStructProp->Struct); InnerIt; ++InnerIt)
+									{
+										if (const FArrayProperty* InnerArrayProp = CastField<FArrayProperty>(*InnerIt))
+										{
+											if (const FObjectProperty* InnerObjProp = CastField<FObjectProperty>(InnerArrayProp->Inner))
+											{
+												FScriptArrayHelper InnerHelper(InnerArrayProp, InnerArrayProp->ContainerPtrToValuePtr<void>(ContainerMemory));
+												int32 TargetIndex = INDEX_NONE;
+
+												for (int32 i = 0; i < InnerHelper.Num(); ++i)
+												{
+													if (InnerObjProp->GetObjectPropertyValue(InnerHelper.GetRawPtr(i)) == Node)
+													{
+														TargetIndex = i;
+														break;
+													}
+												}
+
+												if (TargetIndex != INDEX_NONE)
+												{
+													for (int32 i = 0; i < TargetIndex; ++i)
+													{
+														if (const UScriptableObject* PrevSibling = Cast<UScriptableObject>(InnerObjProp->GetObjectPropertyValue(InnerHelper.GetRawPtr(i))))
+														{
+															OutSiblings.Add(PrevSibling);
+														}
+													}
+													return;
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			};
+
+
+		// -------------------------------------------------------------------------------
+		// 1. Context Hierarchy (Single Effective Scope via Reflection)
+		// -------------------------------------------------------------------------------
+		const UObject* CurrentNode = TargetObject;
+		bool bFoundContext = false;
+
+		while (CurrentNode && !bFoundContext)
+		{
+			// Try to find the FScriptableContainer structurally wrapping the CurrentNode
+			if (const FScriptableContainer* Container = FindContainerForNode(CurrentNode))
+			{
+				if (Container->HasContext() && Container->Context.GetNumPropertiesInBag() > 0)
+				{
+					FPropertyBindingBindableStructDescriptor& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
+					ContextDesc.Name = FName(TEXT("Context"));
+					ContextDesc.Struct = Container->Context.GetPropertyBagStruct();
+					ContextDesc.ID = FGuid(); // Use an empty GUID for Context, just like the UI
+
+					bFoundContext = true;
+					break;
+				}
+			}
+
+			// Move up to the next parent in the hierarchy
+			CurrentNode = CurrentNode->GetOuter();
+			if (CurrentNode && CurrentNode->IsA<UPackage>()) break;
+		}
+
+		// -------------------------------------------------------------------------------
+		// 2. Siblings (Via Memory Traversal)
+		// -------------------------------------------------------------------------------
+		TArray<const UScriptableObject*> AccessibleObjects;
+		CollectSiblingsHeadless(TargetObject, AccessibleObjects);
+
+		// -------------------------------------------------------------------------------
+		// 3. Traversal (Hierarchical Parents & Siblings of Parents)
+		// -------------------------------------------------------------------------------
+		const UObject* IteratorNode = TargetObject;
+		while (IteratorNode)
+		{
+			const UObject* ParentNode = IteratorNode->GetOuter();
+			if (!ParentNode || ParentNode == RootObject->GetOuter()) break;
+
+			if (const UScriptableObject* ParentScriptableObject = Cast<UScriptableObject>(ParentNode))
+			{
+				AccessibleObjects.Add(ParentScriptableObject); // Parent
+				if (ScriptableObjectTraversal::AreSiblingBindingsAllowed(ParentScriptableObject))
+				{
+					// This utility already relies on raw pointers, so it is naturally headless
+					ScriptableObjectTraversal::CollectPreviousSiblings(ParentScriptableObject, IteratorNode, AccessibleObjects);
+				}
+			}
+			IteratorNode = ParentNode;
+		}
+
+		// -------------------------------------------------------------------------------
+		// 4. Convert to Output
+		// -------------------------------------------------------------------------------
+		for (const UScriptableObject* Obj : AccessibleObjects)
+		{
+			if (Obj->GetBindingID().IsValid())
+			{
+				FPropertyBindingBindableStructDescriptor& Desc = OutStructDescs.AddDefaulted_GetRef();
+				FString DisplayName = Obj->GetName();
+				Desc.Name = FName(*DisplayName);
+				Desc.Struct = Obj->GetClass();
+				Desc.ID = Obj->GetBindingID();
+			}
+		}
+	}
+
 	void MakeStructPropertyPathFromPropertyHandle(UScriptableObject* ScriptableObject, TSharedPtr<const IPropertyHandle> InPropertyHandle, FPropertyBindingPath& OutPath)
 	{
 		OutPath.Reset();

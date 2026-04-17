@@ -59,6 +59,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "DataValidation",
+			"Enabled": true
+		},
+		{
 			"Name": "KzLib",
 			"Enabled": true
 		}

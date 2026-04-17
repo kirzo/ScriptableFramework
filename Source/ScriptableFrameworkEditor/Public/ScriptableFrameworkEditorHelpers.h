@@ -42,6 +42,9 @@ namespace ScriptableFrameworkEditor
 	/** Scans the hierarchy to find bindable sources (Action Context, Parents, Siblings). */
 	void GetAccessibleStructs(const UScriptableObject* TargetObject, const TSharedPtr<IPropertyHandle>& Handle, TArray<FPropertyBindingBindableStructDescriptor>& OutStructDescs);
 
+	/** Headless version of GetAccessibleStructs used for Data Validation. */
+	void GetAccessibleStructs_Headless(const UScriptableObject* TargetObject, TArray<FPropertyBindingBindableStructDescriptor>& OutStructDescs);
+
 	/** Generates a full binding path from a PropertyHandle (Source of Truth). */
 	void MakeStructPropertyPathFromPropertyHandle(UScriptableObject* ScriptableObject, TSharedPtr<const IPropertyHandle> InPropertyHandle, FPropertyBindingPath& OutPath);
 
