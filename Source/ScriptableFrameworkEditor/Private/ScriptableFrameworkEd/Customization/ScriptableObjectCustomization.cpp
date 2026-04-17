@@ -576,6 +576,11 @@ namespace ScriptableBindingUI
 
 		FResetToDefaultHandler ResetHandler = FResetToDefaultHandler::CreateLambda([ScriptableObject, CachedData](TSharedPtr<IPropertyHandle> InHandle)
 			{
+				if (InHandle.IsValid())
+				{
+					InHandle->NotifyPreChange();
+				}
+
 				if (ScriptableObject)
 				{
 					FScopedTransaction Transaction(LOCTEXT("Reset", "Reset Property"));
@@ -587,7 +592,13 @@ namespace ScriptableBindingUI
 						if (CachedData->PropertyUtilities.IsValid()) CachedData->PropertyUtilities.Pin()->ForceRefresh();
 					}
 				}
-				if (InHandle.IsValid()) InHandle->ResetToDefault();
+
+				if (InHandle.IsValid()) 
+				{
+					InHandle->ResetToDefault();
+					InHandle->NotifyPostChange(EPropertyChangeType::ResetToDefault);
+					InHandle->NotifyFinishedChangingProperties();
+				}
 			});
 
 		NodeRow.OverrideResetToDefault(FResetToDefaultOverride::Create(IsResetVisible, ResetHandler));
