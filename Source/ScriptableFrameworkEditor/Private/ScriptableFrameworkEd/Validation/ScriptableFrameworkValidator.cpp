@@ -3,6 +3,7 @@
 #include "ScriptableFrameworkValidator.h"
 #include "ScriptableObject.h"
 #include "ScriptableFrameworkEditorHelpers.h"
+#include "Bindings/ScriptablePropertyBindings.h"
 #include "Engine/Blueprint.h"
 #include "Misc/DataValidation.h"
 
@@ -50,6 +51,10 @@ EDataValidationResult UScriptableFrameworkValidator::ValidateLoadedAsset_Impleme
 		UScriptableObject* Obj = Cast<UScriptableObject>(RawObj);
 		if (!Obj) continue;
 
+		// Clean up old auto-bindings from previous compilations/validations 
+		// before generating new ones.
+		Obj->GetPropertyBindings().ClearAutoBindings();
+
 		// Rebuild available contexts without relying on UI Handles
 		TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
 		ScriptableFrameworkEditor::GetAccessibleStructs_Headless(Obj, AccessibleStructs);
@@ -69,7 +74,8 @@ EDataValidationResult UScriptableFrameworkValidator::ValidateLoadedAsset_Impleme
 			TargetPath.SetStructID(Obj->GetBindingID());
 			TargetPath.AddPathSegment(Prop->GetFName());
 
-			const bool bIsManuallyBound = Obj->GetPropertyBindings().HasPropertyBinding(TargetPath);
+			// Check strictly for manual bindings now
+			const bool bIsManuallyBound = Obj->GetPropertyBindings().HasManualPropertyBinding(TargetPath);
 
 			// RULE A: "In" properties MUST have a manual binding
 			if (bIsInput && !bIsManuallyBound)
@@ -88,8 +94,14 @@ EDataValidationResult UScriptableFrameworkValidator::ValidateLoadedAsset_Impleme
 			else if (bIsContext && !bIsManuallyBound)
 			{
 				FPropertyBindingPath AutoBindingPath;
-				if (!ScriptableFrameworkEditor::TryDiscoverAutoBinding(Prop, AccessibleStructs, AutoBindingPath))
+				if (ScriptableFrameworkEditor::TryDiscoverAutoBinding(Prop, AccessibleStructs, AutoBindingPath))
 				{
+					// Baking: Inject the discovered binding dynamically so the Runtime can access it
+					Obj->GetPropertyBindings().AddPropertyBinding(AutoBindingPath, TargetPath, true /* bIsAutoBinding */);
+				}
+				else
+				{
+					// Resolution failed and no manual override exists
 					const FText ErrorText = FText::Format(
 						LOCTEXT("MissingContextBindingError", "Validation Failed in {0} (Action: {1}): Context property '{2}' could not be automatically resolved and requires a manual wire."),
 						FText::FromName(InAssetData.AssetName),

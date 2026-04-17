@@ -391,7 +391,7 @@ namespace ScriptableBindingUI
 		FText Text = GetPinTypeText(PinType);
 		FLinearColor IconColor = Schema->GetPinTypeColor(PinType);
 
-		const bool bIsBound = ScriptableObject->GetPropertyBindings().HasPropertyBinding(CachedData->TargetPath);
+		const bool bIsManuallyBound = ScriptableObject->GetPropertyBindings().HasManualPropertyBinding(CachedData->TargetPath);
 
 		const bool bIsInputProperty = ScriptableFrameworkEditor::IsPropertyBindableInput(Prop);
 		const bool bIsOutputProperty = ScriptableFrameworkEditor::IsPropertyBindableOutput(Prop);
@@ -458,7 +458,7 @@ namespace ScriptableBindingUI
 		// ---------------------------------------------------------
 		// VALUE CONTENT
 		// ---------------------------------------------------------
-		if (bIsOutputProperty || (bIsInputProperty && !bIsBound))
+		if (bIsOutputProperty || (bIsInputProperty && !bIsManuallyBound))
 		{
 			// Read-Only Pin Display
 			WidgetRow.ValueContent()
@@ -484,7 +484,7 @@ namespace ScriptableBindingUI
 						]
 				];
 		}
-		else if (!bIsBound)
+		else if (!bIsManuallyBound)
 		{
 			// Unbound: Auto-Link vs Default Editable Widget
 			if (bIsContextCategory)

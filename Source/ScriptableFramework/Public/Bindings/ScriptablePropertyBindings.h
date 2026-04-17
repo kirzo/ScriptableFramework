@@ -22,6 +22,9 @@ struct SCRIPTABLEFRAMEWORK_API FScriptablePropertyBinding
 
 	UPROPERTY()
 	FGuid SourceID;
+
+	UPROPERTY()
+	bool bIsAutoBinding = false;
 };
 
 /** Container for all property bindings of an object. */
@@ -32,9 +35,12 @@ struct SCRIPTABLEFRAMEWORK_API FScriptablePropertyBindings
 
 public:
 #if WITH_EDITOR
-	void AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath);
+	void AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath, bool bIsAutoBinding = false);
 	void RemovePropertyBindings(const FPropertyBindingPath& TargetPath);
 	bool HasPropertyBinding(const FPropertyBindingPath& TargetPath) const;
+
+	bool HasManualPropertyBinding(const FPropertyBindingPath& TargetPath) const;
+	void ClearAutoBindings();
 
 	void HandleArrayElementRemoved(const FName& ArrayName, int32 IndexRemoved);
 	void HandleArrayClear(const FName& ArrayName);

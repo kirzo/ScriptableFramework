@@ -6,7 +6,7 @@
 #include "StructUtils/PropertyBag.h"
 
 #if WITH_EDITOR
-void FScriptablePropertyBindings::AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath)
+void FScriptablePropertyBindings::AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath, bool bIsAutoBinding)
 {
 	// If a binding already exists for this target, update it
 	for (FScriptablePropertyBinding& Binding : Bindings)
@@ -15,6 +15,7 @@ void FScriptablePropertyBindings::AddPropertyBinding(const FPropertyBindingPath&
 		{
 			Binding.SourcePath = SourcePath;
 			Binding.SourceID = SourcePath.GetStructID();
+			Binding.bIsAutoBinding = bIsAutoBinding;
 			return;
 		}
 	}
@@ -24,6 +25,7 @@ void FScriptablePropertyBindings::AddPropertyBinding(const FPropertyBindingPath&
 	NewBinding.SourcePath = SourcePath;
 	NewBinding.TargetPath = TargetPath;
 	NewBinding.SourceID = SourcePath.GetStructID();
+	NewBinding.bIsAutoBinding = bIsAutoBinding;
 }
 
 void FScriptablePropertyBindings::RemovePropertyBindings(const FPropertyBindingPath& TargetPath)
@@ -40,6 +42,26 @@ bool FScriptablePropertyBindings::HasPropertyBinding(const FPropertyBindingPath&
 	{
 		return Binding.TargetPath == TargetPath;
 	});
+}
+
+bool FScriptablePropertyBindings::HasManualPropertyBinding(const FPropertyBindingPath& TargetPath) const
+{
+	for (const FScriptablePropertyBinding& Binding : Bindings)
+	{
+		if (Binding.TargetPath == TargetPath)
+		{
+			return !Binding.bIsAutoBinding;
+		}
+	}
+	return false;
+}
+
+void FScriptablePropertyBindings::ClearAutoBindings()
+{
+	Bindings.RemoveAll([](const FScriptablePropertyBinding& Binding)
+		{
+			return Binding.bIsAutoBinding;
+		});
 }
 
 void FScriptablePropertyBindings::HandleArrayElementRemoved(const FName& ArrayName, int32 IndexRemoved)
