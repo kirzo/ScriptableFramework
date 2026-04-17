@@ -367,22 +367,15 @@ namespace ScriptableBindingUI
 		return PropertyAccessEditor.MakePropertyBindingWidget(Contexts, Args);
 	}
 
-	void ModifyRow(UScriptableObject* ScriptableObject, IDetailPropertyRow& Row, TSharedPtr<FCachedBindingData> CachedData)
+	void GenerateRowContent(UScriptableObject* ScriptableObject, FDetailWidgetRow& NodeRow, TSharedPtr<FCachedBindingData> CachedData)
 	{
-		if (!ScriptableObject || !CachedData.IsValid())
-		{
-			return;
-		}
+		if (!ScriptableObject || !CachedData.IsValid()) return;
 
-		const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
-		TSharedPtr<IPropertyHandle> PropertyHandle = Row.GetPropertyHandle();
-
-		// Use GetProperty() to safely support both handles and direct dynamic properties
 		const FProperty* Prop = CachedData->GetProperty();
 		if (!Prop) return;
 
-		TSharedPtr<SWidget> NameWidget, ValueWidget;
-		Row.GetDefaultWidgets(NameWidget, ValueWidget);
+		const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+		TSharedPtr<IPropertyHandle> PropertyHandle = CachedData->PropertyHandle;
 
 		FEdGraphPinType PinType;
 		Schema->ConvertPropertyToPinType(Prop, PinType);
@@ -401,29 +394,18 @@ namespace ScriptableBindingUI
 		FText Label;
 		FText LabelToolTip;
 
-		if (bIsInputProperty)
-		{
-			Label = LOCTEXT("LabelInput", "IN");
-			LabelToolTip = LOCTEXT("LabelInputToolTip", "This is an Input property. It is always expected to be bound to some other property.");
-		}
-		else if (bIsOutputProperty)
-		{
-			Label = LOCTEXT("LabelOutput", "OUT");
-			LabelToolTip = LOCTEXT("LabelOutputToolTip", "This is an Output property. The node will always set its value, other nodes can bind to it.");
-		}
-		else if (bIsContextCategory)
-		{
-			Label = LOCTEXT("LabelContext", "CONTEXT");
-			LabelToolTip = LOCTEXT("LabelContextToolTip", "This is a Context property. It is automatically connected to one of the Context objects, or can be overridden with property binding.");
-		}
+		if (bIsInputProperty) { Label = LOCTEXT("LabelInput", "IN"); LabelToolTip = LOCTEXT("LabelInputToolTip", "This is an Input property. It is always expected to be bound to some other property."); }
+		else if (bIsOutputProperty) { Label = LOCTEXT("LabelOutput", "OUT"); LabelToolTip = LOCTEXT("LabelOutputToolTip", "This is an Output property. The node will always set its value, other nodes can bind to it."); }
+		else if (bIsContextCategory) { Label = LOCTEXT("LabelContext", "CONTEXT"); LabelToolTip = LOCTEXT("LabelContextToolTip", "This is a Context property. It is automatically connected to one of the Context objects, or can be overridden with property binding."); }
 
-		// Initialize custom row
-		FDetailWidgetRow& WidgetRow = Row.CustomWidget(true);
+		TSharedPtr<SWidget> OriginalNameWidget = NodeRow.NameContent().Widget;
+		TSharedPtr<SWidget> OriginalValueWidget = NodeRow.ValueContent().Widget;
+		TSharedPtr<SWidget> OriginalExtensionWidget = NodeRow.ExtensionContent().Widget;
 
 		// ---------------------------------------------------------
 		// NAME CONTENT
 		// ---------------------------------------------------------
-		WidgetRow.NameContent()
+		NodeRow.NameContent()
 			[
 				SNew(SHorizontalBox)
 
@@ -432,7 +414,7 @@ namespace ScriptableBindingUI
 					.AutoWidth()
 					.VAlign(VAlign_Center)
 					[
-						NameWidget.ToSharedRef()
+						OriginalNameWidget.IsValid() ? OriginalNameWidget.ToSharedRef() : SNullWidget::NullWidget
 					]
 
 					// Pill (IN/OUT/CONTEXT)
@@ -461,7 +443,7 @@ namespace ScriptableBindingUI
 		if (bIsOutputProperty || (bIsInputProperty && !bIsManuallyBound))
 		{
 			// Read-Only Pin Display
-			WidgetRow.ValueContent()
+			NodeRow.ValueContent()
 				[
 					SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot()
@@ -490,12 +472,10 @@ namespace ScriptableBindingUI
 			if (bIsContextCategory)
 			{
 				FPropertyBindingPath AutoBindingPath;
-				const bool bValidAutoBinding = ScriptableFrameworkEditor::TryDiscoverAutoBinding(Prop, CachedData->AccessibleStructs, AutoBindingPath);
-
-				if (bValidAutoBinding)
+				if (ScriptableFrameworkEditor::TryDiscoverAutoBinding(Prop, CachedData->AccessibleStructs, AutoBindingPath))
 				{
 					const FName BoundParamName = AutoBindingPath.GetSegment(AutoBindingPath.NumSegments() - 1).GetName();
-					WidgetRow.ValueContent()
+					NodeRow.ValueContent()
 						[
 							SNew(SHorizontalBox)
 								+ SHorizontalBox::Slot()
@@ -521,7 +501,7 @@ namespace ScriptableBindingUI
 				}
 				else
 				{
-					WidgetRow.ValueContent()
+					NodeRow.ValueContent()
 						[
 							SNew(SHorizontalBox)
 								.ToolTipText(LOCTEXT("ContextWarningTooltip", "Could not connect Context property automatically."))
@@ -549,11 +529,19 @@ namespace ScriptableBindingUI
 			else
 			{
 				// Default Editable Widget
-				WidgetRow.ValueContent()
+				NodeRow.ValueContent()
 					[
-						SNew(SBox)[ValueWidget.ToSharedRef()]
+						OriginalValueWidget.IsValid() ? OriginalValueWidget.ToSharedRef() : SNullWidget::NullWidget
 					];
 			}
+		}
+		else
+		{
+			// It IS manually bound. We must hide the default widget so it doesn't overlap the binding extension widget if any
+			NodeRow.ValueContent()
+				[
+					SNullWidget::NullWidget
+				];
 		}
 
 		// ---------------------------------------------------------
@@ -561,7 +549,7 @@ namespace ScriptableBindingUI
 		// ---------------------------------------------------------
 		if (!bIsOutputProperty)
 		{
-			WidgetRow.ExtensionContent()
+			NodeRow.ExtensionContent()
 				[
 					SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot()
@@ -575,14 +563,56 @@ namespace ScriptableBindingUI
 						.AutoWidth()
 						.VAlign(VAlign_Center)
 						[
-							PropertyHandle->CreateDefaultPropertyButtonWidgets()
+							OriginalExtensionWidget.IsValid() ? OriginalExtensionWidget.ToSharedRef() : SNullWidget::NullWidget
 						]
 				];
 		}
+
+		FIsResetToDefaultVisible IsResetVisible = FIsResetToDefaultVisible::CreateLambda([ScriptableObject, CachedData](TSharedPtr<IPropertyHandle> InHandle)
+			{
+				if (ScriptableObject && ScriptableObject->GetPropertyBindings().HasManualPropertyBinding(CachedData->TargetPath)) return true;
+				return InHandle.IsValid() && InHandle->DiffersFromDefault();
+			});
+
+		FResetToDefaultHandler ResetHandler = FResetToDefaultHandler::CreateLambda([ScriptableObject, CachedData](TSharedPtr<IPropertyHandle> InHandle)
+			{
+				if (ScriptableObject)
+				{
+					FScopedTransaction Transaction(LOCTEXT("Reset", "Reset Property"));
+					ScriptableObject->Modify();
+					if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(CachedData->TargetPath))
+					{
+						ScriptableObject->GetPropertyBindings().RemovePropertyBindings(CachedData->TargetPath);
+						if (CachedData) CachedData->Invalidate();
+						if (CachedData->PropertyUtilities.IsValid()) CachedData->PropertyUtilities.Pin()->ForceRefresh();
+					}
+				}
+				if (InHandle.IsValid()) InHandle->ResetToDefault();
+			});
+
+		NodeRow.OverrideResetToDefault(FResetToDefaultOverride::Create(IsResetVisible, ResetHandler));
+	}
+
+	void ModifyRow(UScriptableObject* ScriptableObject, IDetailPropertyRow& Row, TSharedPtr<FCachedBindingData> CachedData)
+	{
+		if (!ScriptableObject || !CachedData.IsValid()) return;
+
+		TSharedPtr<SWidget> NameWidget, ValueWidget;
+		Row.GetDefaultWidgets(NameWidget, ValueWidget);
+
+		// Initialize custom row
+		FDetailWidgetRow& NodeRow = Row.CustomWidget(true);
+
+		NodeRow.NameContent()[NameWidget.IsValid() ? NameWidget.ToSharedRef() : SNullWidget::NullWidget];
+		NodeRow.ValueContent()[ValueWidget.IsValid() ? ValueWidget.ToSharedRef() : SNullWidget::NullWidget];
+
+		GenerateRowContent(ScriptableObject, NodeRow, CachedData);
 	}
 }
 
-/** Custom Array Builder that allows binding the Array property itself (Header) */
+// ------------------------------------------------------------------------------------------------
+// FScriptableArrayBuilder
+// ------------------------------------------------------------------------------------------------
 class FScriptableArrayBuilder : public FDetailArrayBuilder
 {
 public:
@@ -604,54 +634,13 @@ public:
 		{
 			TSharedPtr<IPropertyHandle> Handle = GetPropertyHandle();
 
-			// Check if we can/should bind this array
-			// Note: We duplicate the check logic here or assume caller checked it.
-			// Let's assume valid since we created this builder.
-
 			FPropertyBindingPath TargetPath;
 			ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(Obj, Handle, TargetPath);
 
 			TSharedPtr<ScriptableBindingUI::FCachedBindingData> CachedData =
 				MakeShared<ScriptableBindingUI::FCachedBindingData>(Obj, TargetPath, Handle, Handle, AccessibleStructs, PropertyUtilities);
 
-			// --- Visibility Logic ---
-			// If the array itself is bound, we hide the standard controls (ValueContent)
-			// because the array content is driven by the binding.
-			TSharedPtr<SWidget> StandardValueWidget = NodeRow.ValueContent().Widget;
-
-			auto IsValueVisible = TAttribute<EVisibility>::Create([Obj, Handle]() -> EVisibility
-			{
-				if (!Obj) return EVisibility::Visible;
-				FPropertyBindingPath TP;
-				ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(Obj, Handle, TP);
-				return Obj->GetPropertyBindings().HasPropertyBinding(TP) ? EVisibility::Collapsed : EVisibility::Visible;
-			});
-
-			// Wrap the standard value widget
-			NodeRow.ValueContent()
-				[
-					SNew(SBox)
-						.Visibility(IsValueVisible)
-						.VAlign(VAlign_Center)
-						[
-							StandardValueWidget.ToSharedRef()
-						]
-				];
-
-			// --- Extension Logic (The Pill) ---
-			TSharedPtr<SWidget> BindingWidget = ScriptableBindingUI::CreateBindingWidget(Handle, CachedData);
-
-			NodeRow.ExtensionContent()
-				[
-					SNew(SHorizontalBox)
-						+ SHorizontalBox::Slot()
-						.AutoWidth()
-						.VAlign(VAlign_Center)
-						.Padding(2.0f, 0.0f)
-						[
-							BindingWidget.ToSharedRef()
-						]
-				];
+			ScriptableBindingUI::GenerateRowContent(Obj, NodeRow, CachedData);
 		}
 	}
 
@@ -681,78 +670,11 @@ public:
 		TSharedPtr<ScriptableBindingUI::FCachedBindingData> CachedData =
 			MakeShared<ScriptableBindingUI::FCachedBindingData>(Obj, TargetPath, Handle, Handle, AccessibleStructs, Customization->GetPropertyUtilities());
 
-		auto IsValueVisible = TAttribute<EVisibility>::Create([Obj = this->Obj, Handle = this->Handle]() -> EVisibility
-			{
-				if (!Obj) return EVisibility::Visible;
-				FPropertyBindingPath TP;
-				ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(Obj, Handle, TP);
-				return Obj->GetPropertyBindings().HasPropertyBinding(TP) ? EVisibility::Collapsed : EVisibility::Visible;
-			});
+		// Pre-fill with the default struct widgets
+		NodeRow.NameContent()[Handle->CreatePropertyNameWidget()];
+		NodeRow.ValueContent()[Handle->CreatePropertyValueWidget()];
 
-		TSharedPtr<SWidget> BindingWidget = ScriptableBindingUI::CreateBindingWidget(Handle, CachedData);
-
-		FIsResetToDefaultVisible IsResetVisible = FIsResetToDefaultVisible::CreateLambda([Obj = this->Obj, TargetPath](TSharedPtr<IPropertyHandle> InHandle)
-			{
-				// Return true if we have a custom binding
-				if (Obj && Obj->GetPropertyBindings().HasPropertyBinding(TargetPath)) return true;
-
-				// Safely check if the handle is valid before checking its default state
-				return InHandle.IsValid() && InHandle->DiffersFromDefault();
-			});
-
-		FResetToDefaultHandler ResetHandler = FResetToDefaultHandler::CreateLambda([Obj = this->Obj, TargetPath, CachedData, Customization = this->Customization](TSharedPtr<IPropertyHandle> InHandle)
-			{
-				if (Obj)
-				{
-					FScopedTransaction Transaction(LOCTEXT("Reset", "Reset Property"));
-					Obj->Modify();
-					if (Obj->GetPropertyBindings().HasPropertyBinding(TargetPath))
-					{
-						Obj->GetPropertyBindings().RemovePropertyBindings(TargetPath);
-						if (CachedData) CachedData->Invalidate();
-						if (Customization && Customization->GetPropertyUtilities().IsValid()) Customization->GetPropertyUtilities()->ForceRefresh();
-					}
-				}
-
-				// Safely reset to default only if the handle is valid
-				if (InHandle.IsValid())
-				{
-					InHandle->ResetToDefault();
-				}
-			});
-
-		NodeRow.OverrideResetToDefault(FResetToDefaultOverride::Create(IsResetVisible, ResetHandler));
-
-		NodeRow
-			.NameContent()
-			[
-				Handle->CreatePropertyNameWidget()
-			]
-			.ValueContent()
-			[
-				SNew(SBox)
-					.Visibility(IsValueVisible)
-					[
-						Handle->CreatePropertyValueWidget()
-					]
-			]
-		.ExtensionContent()
-			[
-				SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot()
-					.AutoWidth()
-					.VAlign(VAlign_Center)
-					.Padding(2.0f, 0.0f)
-					[
-						BindingWidget.ToSharedRef()
-					]
-					+ SHorizontalBox::Slot()
-					.AutoWidth()
-					.VAlign(VAlign_Center)
-					[
-						Handle->CreateDefaultPropertyButtonWidgets()
-					]
-			];
+		ScriptableBindingUI::GenerateRowContent(Obj, NodeRow, CachedData);
 	}
 
 	virtual void GenerateChildContent(IDetailChildrenBuilder& ChildrenBuilder) override
@@ -780,6 +702,7 @@ public:
 	virtual bool RequiresTick() const override { return false; }
 	virtual FName GetName() const override { return Handle->GetProperty()->GetFName(); }
 	virtual bool InitiallyCollapsed() const override { return true; }
+	virtual TSharedPtr<IPropertyHandle> GetPropertyHandle() const override { return Handle; }
 
 private:
 	TSharedRef<IPropertyHandle> Handle;
@@ -1850,37 +1773,6 @@ void FScriptableObjectCustomization::BindPropertyRow(IDetailPropertyRow& Row, TS
 
 	TSharedPtr<ScriptableBindingUI::FCachedBindingData> CachedData =
 		MakeShared<ScriptableBindingUI::FCachedBindingData>(Obj, TargetPath, Handle, Handle, AccessibleStructs, GetPropertyUtilities());
-
-	// 3. Reset Handler Logic (Local to Object now!)
-	FIsResetToDefaultVisible IsResetVisible = FIsResetToDefaultVisible::CreateLambda([this, TargetPath, Handle](TSharedPtr<IPropertyHandle> InHandle)
-	{
-		if (UScriptableObject* MyObj = ScriptableObject.Get())
-		{
-			// Check local bindings
-			if (MyObj->GetPropertyBindings().HasPropertyBinding(TargetPath)) return true;
-		}
-		return InHandle->DiffersFromDefault();
-	});
-
-	FResetToDefaultHandler ResetHandler = FResetToDefaultHandler::CreateLambda([this, TargetPath, Handle, CachedData](TSharedPtr<IPropertyHandle> InHandle)
-	{
-		if (UScriptableObject* MyObj = ScriptableObject.Get())
-		{
-			FScopedTransaction Transaction(LOCTEXT("Reset", "Reset Property"));
-			MyObj->Modify();
-
-			// Remove local binding
-			if (MyObj->GetPropertyBindings().HasPropertyBinding(TargetPath))
-			{
-				MyObj->GetPropertyBindings().RemovePropertyBindings(TargetPath);
-				if (CachedData) CachedData->Invalidate();
-				if (GetPropertyUtilities().IsValid()) GetPropertyUtilities()->ForceRefresh();
-			}
-		}
-		InHandle->ResetToDefault();
-	});
-
-	Row.OverrideResetToDefault(FResetToDefaultOverride::Create(IsResetVisible, ResetHandler));
 
 	ScriptableBindingUI::ModifyRow(Obj, Row, CachedData);
 }
