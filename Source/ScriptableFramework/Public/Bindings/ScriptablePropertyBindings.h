@@ -42,6 +42,8 @@ public:
 	bool HasManualPropertyBinding(const FPropertyBindingPath& TargetPath) const;
 	void ClearAutoBindings();
 
+	void SanitizeObsoleteBindings(class UScriptableObject* TargetObject);
+
 	void HandleArrayElementRemoved(const FName& ArrayName, int32 IndexRemoved);
 	void HandleArrayClear(const FName& ArrayName);
 

@@ -5,6 +5,88 @@
 #include "ScriptableObject.h"
 #include "StructUtils/PropertyBag.h"
 
+// ------------------------------------------------------------------------------------------------
+// Helper to resolve paths manually, bypassing Unreal's native black-box function.
+// This supports diving into FInstancedPropertyBags no matter what parent struct they live inside.
+// ------------------------------------------------------------------------------------------------
+static bool ResolveIndirections(const FPropertyBindingPath& Path, const FPropertyBindingDataView& View, const FProperty*& OutProp, void*& OutAddr)
+{
+	if (!View.IsValid() || Path.IsPathEmpty()) return false;
+
+	const UStruct* CurrentStruct = View.GetStruct();
+	void* CurrentAddr = View.GetMutableMemory();
+
+	for (int32 i = 0; i < Path.NumSegments(); ++i)
+	{
+		const FPropertyBindingPathSegment& Segment = Path.GetSegment(i);
+
+		// Find the property in the current struct context
+		const FProperty* Prop = CurrentStruct->FindPropertyByName(Segment.GetName());
+		if (!Prop) return false; // Path is broken
+
+		// Advance the memory pointer to this property
+		void* PropAddr = Prop->ContainerPtrToValuePtr<void>(CurrentAddr);
+
+		// Handle Array indices if this segment targets an element
+		if (Segment.GetArrayIndex() != INDEX_NONE)
+		{
+			if (const FArrayProperty* ArrayProp = CastField<FArrayProperty>(Prop))
+			{
+				FScriptArrayHelper Helper(ArrayProp, PropAddr);
+				if (!Helper.IsValidIndex(Segment.GetArrayIndex())) return false;
+				PropAddr = Helper.GetRawPtr(Segment.GetArrayIndex());
+				Prop = ArrayProp->Inner;
+			}
+			else return false;
+		}
+
+		// If this is the final segment in the path, we have our target
+		if (i == Path.NumSegments() - 1)
+		{
+			OutProp = Prop;
+			OutAddr = PropAddr;
+			return true;
+		}
+
+		// If not the last segment, prepare CurrentStruct and CurrentAddr for the next loop iteration
+		if (const FStructProperty* StructProp = CastField<FStructProperty>(Prop))
+		{
+			// MAGIC: Generic detection of ANY InstancedPropertyBag hidden inside any struct
+			if (StructProp->Struct->GetFName() == TEXT("InstancedPropertyBag"))
+			{
+				FInstancedPropertyBag* Bag = static_cast<FInstancedPropertyBag*>(PropAddr);
+				if (!Bag || !Bag->IsValid()) return false;
+
+				// Swap our context to the dynamic struct and dynamic memory of the bag
+				CurrentStruct = Bag->GetPropertyBagStruct();
+				CurrentAddr = Bag->GetMutableValue().GetMemory();
+			}
+			else
+			{
+				// Standard struct traversal
+				CurrentStruct = StructProp->Struct;
+				CurrentAddr = PropAddr;
+			}
+		}
+		else if (const FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(Prop))
+		{
+			UObject* Obj = ObjProp->GetObjectPropertyValue(PropAddr);
+			if (!Obj) return false;
+
+			// Standard UObject traversal
+			CurrentStruct = Obj->GetClass();
+			CurrentAddr = Obj;
+		}
+		else
+		{
+			// We hit a primitive type but the path still has more segments (invalid path)
+			return false;
+		}
+	}
+
+	return false;
+}
+
 #if WITH_EDITOR
 void FScriptablePropertyBindings::AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath, bool bIsAutoBinding)
 {
@@ -89,6 +171,30 @@ void FScriptablePropertyBindings::ClearAutoBindings()
 		});
 }
 
+void FScriptablePropertyBindings::SanitizeObsoleteBindings(UScriptableObject* TargetObject)
+{
+	ClearAutoBindings();
+
+	if (!TargetObject) return;
+
+	// Create a data view of this object to navigate through its memory
+	FPropertyBindingDataView TargetView(TargetObject);
+
+	for (int32 i = Bindings.Num() - 1; i >= 0; --i)
+	{
+		const FScriptablePropertyBinding& Binding = Bindings[i];
+
+		const FProperty* OutProp = nullptr;
+		void* OutAddr = nullptr;
+
+		// If resolving the TargetPath fails, it means the variable or its parent struct has been deleted.
+		if (!ResolveIndirections(Binding.TargetPath, TargetView, OutProp, OutAddr))
+		{
+			Bindings.RemoveAt(i);
+		}
+	}
+}
+
 void FScriptablePropertyBindings::HandleArrayElementRemoved(const FName& ArrayName, int32 IndexRemoved)
 {
 	if (IndexRemoved < 0) return;
@@ -148,88 +254,6 @@ const FPropertyBindingPath* FScriptablePropertyBindings::GetPropertyBinding(cons
 	return FoundBinding ? &FoundBinding->SourcePath : nullptr;
 }
 #endif
-
-// ------------------------------------------------------------------------------------------------
-// Helper to resolve paths manually, bypassing Unreal's native black-box function.
-// This supports diving into FInstancedPropertyBags no matter what parent struct they live inside.
-// ------------------------------------------------------------------------------------------------
-static bool ResolveIndirections(const FPropertyBindingPath& Path, const FPropertyBindingDataView& View, const FProperty*& OutProp, void*& OutAddr)
-{
-	if (!View.IsValid() || Path.IsPathEmpty()) return false;
-
-	const UStruct* CurrentStruct = View.GetStruct();
-	void* CurrentAddr = View.GetMutableMemory();
-
-	for (int32 i = 0; i < Path.NumSegments(); ++i)
-	{
-		const FPropertyBindingPathSegment& Segment = Path.GetSegment(i);
-
-		// Find the property in the current struct context
-		const FProperty* Prop = CurrentStruct->FindPropertyByName(Segment.GetName());
-		if (!Prop) return false; // Path is broken
-
-		// Advance the memory pointer to this property
-		void* PropAddr = Prop->ContainerPtrToValuePtr<void>(CurrentAddr);
-
-		// Handle Array indices if this segment targets an element
-		if (Segment.GetArrayIndex() != INDEX_NONE)
-		{
-			if (const FArrayProperty* ArrayProp = CastField<FArrayProperty>(Prop))
-			{
-				FScriptArrayHelper Helper(ArrayProp, PropAddr);
-				if (!Helper.IsValidIndex(Segment.GetArrayIndex())) return false;
-				PropAddr = Helper.GetRawPtr(Segment.GetArrayIndex());
-				Prop = ArrayProp->Inner;
-			}
-			else return false;
-		}
-
-		// If this is the final segment in the path, we have our target
-		if (i == Path.NumSegments() - 1)
-		{
-			OutProp = Prop;
-			OutAddr = PropAddr;
-			return true;
-		}
-
-		// If not the last segment, prepare CurrentStruct and CurrentAddr for the next loop iteration
-		if (const FStructProperty* StructProp = CastField<FStructProperty>(Prop))
-		{
-			// MAGIC: Generic detection of ANY InstancedPropertyBag hidden inside any struct
-			if (StructProp->Struct->GetFName() == TEXT("InstancedPropertyBag"))
-			{
-				FInstancedPropertyBag* Bag = static_cast<FInstancedPropertyBag*>(PropAddr);
-				if (!Bag || !Bag->IsValid()) return false;
-
-				// Swap our context to the dynamic struct and dynamic memory of the bag
-				CurrentStruct = Bag->GetPropertyBagStruct();
-				CurrentAddr = Bag->GetMutableValue().GetMemory();
-			}
-			else
-			{
-				// Standard struct traversal
-				CurrentStruct = StructProp->Struct;
-				CurrentAddr = PropAddr;
-			}
-		}
-		else if (const FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(Prop))
-		{
-			UObject* Obj = ObjProp->GetObjectPropertyValue(PropAddr);
-			if (!Obj) return false;
-
-			// Standard UObject traversal
-			CurrentStruct = Obj->GetClass();
-			CurrentAddr = Obj;
-		}
-		else
-		{
-			// We hit a primitive type but the path still has more segments (invalid path)
-			return false;
-		}
-	}
-
-	return false;
-}
 
 void FScriptablePropertyBindings::ResolveBindings(UScriptableObject* TargetObject)
 {

@@ -51,9 +51,8 @@ EDataValidationResult UScriptableFrameworkValidator::ValidateLoadedAsset_Impleme
 		UScriptableObject* Obj = Cast<UScriptableObject>(RawObj);
 		if (!Obj) continue;
 
-		// Clean up old auto-bindings from previous compilations/validations 
-		// before generating new ones.
-		Obj->GetPropertyBindings().ClearAutoBindings();
+		// Sanitize
+		Obj->GetPropertyBindings().SanitizeObsoleteBindings(Obj);
 
 		// Rebuild available contexts without relying on UI Handles
 		TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
