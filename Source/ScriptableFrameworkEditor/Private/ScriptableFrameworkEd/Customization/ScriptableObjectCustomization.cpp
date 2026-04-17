@@ -369,83 +369,65 @@ namespace ScriptableBindingUI
 
 	void ModifyRow(UScriptableObject* ScriptableObject, IDetailPropertyRow& Row, TSharedPtr<FCachedBindingData> CachedData)
 	{
+		if (!ScriptableObject || !CachedData.IsValid())
+		{
+			return;
+		}
+
 		const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
 		TSharedPtr<IPropertyHandle> PropertyHandle = Row.GetPropertyHandle();
+
+		// Use GetProperty() to safely support both handles and direct dynamic properties
+		const FProperty* Prop = CachedData->GetProperty();
+		if (!Prop) return;
 
 		TSharedPtr<SWidget> NameWidget, ValueWidget;
 		Row.GetDefaultWidgets(NameWidget, ValueWidget);
 
 		FEdGraphPinType PinType;
-		Schema->ConvertPropertyToPinType(PropertyHandle->GetProperty(), PinType);
-
-		auto IsValueVisible = TAttribute<EVisibility>::Create([ScriptableObject, PropertyHandle]() -> EVisibility
-		{
-			if (!ScriptableObject) return EVisibility::Visible;
-			FPropertyBindingPath TP;
-			ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, PropertyHandle, TP);
-			return ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP) ? EVisibility::Collapsed : EVisibility::Visible;
-		});
+		Schema->ConvertPropertyToPinType(Prop, PinType);
 
 		const FSlateBrush* Icon = FBlueprintEditorUtils::GetIconFromPin(PinType, true);
 		FText Text = GetPinTypeText(PinType);
-
-		FText ToolTip;
 		FLinearColor IconColor = Schema->GetPinTypeColor(PinType);
+
+		const bool bIsBound = ScriptableObject->GetPropertyBindings().HasPropertyBinding(CachedData->TargetPath);
+
+		const bool bIsInputProperty = ScriptableFrameworkEditor::IsPropertyBindableInput(Prop);
+		const bool bIsOutputProperty = ScriptableFrameworkEditor::IsPropertyBindableOutput(Prop);
+		const bool bIsContextCategory = ScriptableFrameworkEditor::IsPropertyBindableContext(Prop);
+
+		// Determine Pill styling
 		FText Label;
 		FText LabelToolTip;
-		FSlateColor TextColor = FSlateColor::UseForeground();
 
-		const bool bIsOutputProperty = ScriptableFrameworkEditor::IsPropertyBindableOutput(PropertyHandle->GetProperty());
-
-		if (bIsOutputProperty)
+		if (bIsInputProperty)
+		{
+			Label = LOCTEXT("LabelInput", "IN");
+			LabelToolTip = LOCTEXT("LabelInputToolTip", "This is an Input property. It is always expected to be bound to some other property.");
+		}
+		else if (bIsOutputProperty)
 		{
 			Label = LOCTEXT("LabelOutput", "OUT");
-			LabelToolTip = LOCTEXT("OutputToolTip", "This is Output property. The node will always set it's value, other nodes can bind to it.");
+			LabelToolTip = LOCTEXT("LabelOutputToolTip", "This is an Output property. The node will always set its value, other nodes can bind to it.");
 		}
-
-		TSharedPtr<SWidget> ContentWidget = SNullWidget::NullWidget;
-		if (bIsOutputProperty)
+		else if (bIsContextCategory)
 		{
-			ContentWidget = SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot()
-				.AutoWidth()
-				.VAlign(VAlign_Center)
-				.Padding(4.0f, 0.0f)
-				[
-					SNew(SImage)
-						.Image(Icon)
-						.ColorAndOpacity(IconColor)
-						.ToolTipText(ToolTip)
-				]
-
-				+ SHorizontalBox::Slot()
-				.AutoWidth()
-				.VAlign(VAlign_Center)
-				[
-					SNew(STextBlock)
-						.Font(IDetailLayoutBuilder::GetDetailFont())
-						.ColorAndOpacity(TextColor)
-						.Text(Text)
-						.ToolTipText(ToolTip)
-				];
-		}
-		else
-		{
-			ContentWidget = SNew(SBox)
-				.Visibility(IsValueVisible)
-				[
-					ValueWidget.ToSharedRef()
-				];
+			Label = LOCTEXT("LabelContext", "CONTEXT");
+			LabelToolTip = LOCTEXT("LabelContextToolTip", "This is a Context property. It is automatically connected to one of the Context objects, or can be overridden with property binding.");
 		}
 
-		TSharedPtr<SWidget> BindingWidget = bIsOutputProperty ? SNullWidget::NullWidget : ScriptableBindingUI::CreateBindingWidget(PropertyHandle, CachedData);
+		// Initialize custom row
+		FDetailWidgetRow& WidgetRow = Row.CustomWidget(true);
 
-		Row
-			.CustomWidget(true)
-			.NameContent()
+		// ---------------------------------------------------------
+		// NAME CONTENT
+		// ---------------------------------------------------------
+		WidgetRow.NameContent()
 			[
 				SNew(SHorizontalBox)
 
+					// Name
 					+ SHorizontalBox::Slot()
 					.AutoWidth()
 					.VAlign(VAlign_Center)
@@ -453,6 +435,7 @@ namespace ScriptableBindingUI
 						NameWidget.ToSharedRef()
 					]
 
+					// Pill (IN/OUT/CONTEXT)
 					+ SHorizontalBox::Slot()
 					.AutoWidth()
 					.VAlign(VAlign_Center)
@@ -470,29 +453,132 @@ namespace ScriptableBindingUI
 									.ToolTipText(LabelToolTip)
 							]
 					]
-
-			]
-			.ValueContent()
-			[
-				ContentWidget.ToSharedRef()
-			]
-			.ExtensionContent()
-			[
-				SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot()
-					.AutoWidth()
-					.VAlign(VAlign_Center)
-					.Padding(2.0f, 0.0f)
-					[
-						BindingWidget.ToSharedRef()
-					]
-					+ SHorizontalBox::Slot()
-					.AutoWidth()
-					.VAlign(VAlign_Center)
-					[
-						PropertyHandle->CreateDefaultPropertyButtonWidgets()
-					]
 			];
+
+		// ---------------------------------------------------------
+		// VALUE CONTENT
+		// ---------------------------------------------------------
+		if (bIsOutputProperty || (bIsInputProperty && !bIsBound))
+		{
+			// Read-Only Pin Display
+			WidgetRow.ValueContent()
+				[
+					SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot()
+						.AutoWidth()
+						.VAlign(VAlign_Center)
+						.Padding(4.0f, 0.0f)
+						[
+							SNew(SImage)
+								.Image(Icon)
+								.ColorAndOpacity(IconColor)
+						]
+						+ SHorizontalBox::Slot()
+						.AutoWidth()
+						.VAlign(VAlign_Center)
+						[
+							SNew(STextBlock)
+								.Font(IDetailLayoutBuilder::GetDetailFont())
+								.ColorAndOpacity(FSlateColor::UseForeground())
+								.Text(Text)
+						]
+				];
+		}
+		else if (!bIsBound)
+		{
+			// Unbound: Auto-Link vs Default Editable Widget
+			if (bIsContextCategory)
+			{
+				FPropertyBindingPath AutoBindingPath;
+				const bool bValidAutoBinding = ScriptableFrameworkEditor::TryDiscoverAutoBinding(Prop, CachedData->AccessibleStructs, AutoBindingPath);
+
+				if (bValidAutoBinding)
+				{
+					const FName BoundParamName = AutoBindingPath.GetSegment(AutoBindingPath.NumSegments() - 1).GetName();
+					WidgetRow.ValueContent()
+						[
+							SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot()
+								.AutoWidth()
+								.VAlign(VAlign_Center)
+								.Padding(4.0f, 0.0f)
+								[
+									SNew(SImage)
+										.Image(FAppStyle::GetBrush("Icons.Link"))
+										.ColorAndOpacity(IconColor)
+								]
+								+ SHorizontalBox::Slot()
+								.FillWidth(1.0f)
+								.VAlign(VAlign_Center)
+								[
+									SNew(STextBlock)
+										.Font(IDetailLayoutBuilder::GetDetailFont())
+										.ColorAndOpacity(FSlateColor::UseForeground())
+										.Text(FText::FromName(BoundParamName))
+										.ToolTipText(FText::Format(LOCTEXT("AutoBoundTooltip", "Connected to Context {0}"), FText::FromName(BoundParamName)))
+								]
+						];
+				}
+				else
+				{
+					WidgetRow.ValueContent()
+						[
+							SNew(SHorizontalBox)
+								.ToolTipText(LOCTEXT("ContextWarningTooltip", "Could not connect Context property automatically."))
+								+ SHorizontalBox::Slot()
+								.AutoWidth()
+								.VAlign(VAlign_Center)
+								.Padding(4.0f, 0.0f)
+								[
+									SNew(SImage)
+										.Image(FAppStyle::GetBrush("Icons.Warning"))
+										.ColorAndOpacity(IconColor)
+								]
+								+ SHorizontalBox::Slot()
+								.FillWidth(1.0f)
+								.VAlign(VAlign_Center)
+								[
+									SNew(STextBlock)
+										.Font(IDetailLayoutBuilder::GetDetailFont())
+										.ColorAndOpacity(FSlateColor::UseForeground())
+										.Text(Prop->GetDisplayNameText())
+								]
+						];
+				}
+			}
+			else
+			{
+				// Default Editable Widget
+				WidgetRow.ValueContent()
+					[
+						SNew(SBox)[ValueWidget.ToSharedRef()]
+					];
+			}
+		}
+
+		// ---------------------------------------------------------
+		// EXTENSION CONTENT
+		// ---------------------------------------------------------
+		if (!bIsOutputProperty)
+		{
+			WidgetRow.ExtensionContent()
+				[
+					SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot()
+						.AutoWidth()
+						.VAlign(VAlign_Center)
+						.Padding(2.0f, 0.0f)
+						[
+							ScriptableBindingUI::CreateBindingWidget(PropertyHandle, CachedData).ToSharedRef()
+						]
+						+ SHorizontalBox::Slot()
+						.AutoWidth()
+						.VAlign(VAlign_Center)
+						[
+							PropertyHandle->CreateDefaultPropertyButtonWidgets()
+						]
+				];
+		}
 	}
 }
 

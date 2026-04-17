@@ -112,12 +112,28 @@ namespace ScriptableFrameworkEditor
 		}
 	}
 
+	bool IsPropertyBindableInput(const FProperty* Property)
+	{
+		if (!Property) return false;
+		if (Property->HasMetaData(TEXT("ScriptableInput"))) return true;
+		const FString Category = Property->GetMetaData(TEXT("Category"));
+		return Category.Contains(TEXT("Input"));
+	}
+
 	bool IsPropertyBindableOutput(const FProperty* Property)
 	{
 		if (!Property) return false;
 		if (Property->HasMetaData(TEXT("ScriptableOutput"))) return true;
 		const FString Category = Property->GetMetaData(TEXT("Category"));
-		return Category.StartsWith(TEXT("Output"));
+		return Category.Contains(TEXT("Output"));
+	}
+
+	bool IsPropertyBindableContext(const FProperty* Property)
+	{
+		if (!Property) return false;
+		if (Property->HasMetaData(TEXT("ScriptableContext"))) return true;
+		const FString Category = Property->GetMetaData(TEXT("Category"));
+		return Category.Contains(TEXT("Context"));
 	}
 
 	FString GetPropertyMetaData(const TSharedPtr<IPropertyHandle>& Handle, const FName& MetaDataKey)

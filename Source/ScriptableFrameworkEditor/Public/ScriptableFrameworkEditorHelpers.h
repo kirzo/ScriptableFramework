@@ -22,7 +22,10 @@ namespace ScriptableFrameworkEditor
 	bool IsPropertyVisible(TSharedRef<IPropertyHandle> PropertyHandle);
 	bool IsPropertyExtendable(TSharedPtr<IPropertyHandle> InPropertyHandle);
 	void GetScriptableCategory(const UClass* ScriptableClass, FName& ClassCategoryMeta, FName& PropertyCategoryMeta);
+
+	bool IsPropertyBindableInput(const FProperty* Property);
 	bool IsPropertyBindableOutput(const FProperty* Property);
+	bool IsPropertyBindableContext(const FProperty* Property);
 
 	/** Retrieves metadata from a property handle, bubbling up to parent handles if necessary. */
 	FString GetPropertyMetaData(const TSharedPtr<IPropertyHandle>& Handle, const FName& MetaDataKey);
