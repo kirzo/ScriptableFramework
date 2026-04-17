@@ -8,6 +8,31 @@
 #if WITH_EDITOR
 void FScriptablePropertyBindings::AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath, bool bIsAutoBinding)
 {
+	// Sanitize
+	Bindings.RemoveAll([&TargetPath](const FScriptablePropertyBinding& Binding)
+		{
+			// If the current binding has fewer or an equal number of segments compared to the Target, it cannot be a child.
+			if (Binding.TargetPath.NumSegments() <= TargetPath.NumSegments())
+			{
+				return false;
+			}
+
+			// Verify if this binding's path starts exactly the same as our TargetPath.
+			for (int32 i = 0; i < TargetPath.NumSegments(); ++i)
+			{
+				const FPropertyBindingPathSegment& ParentSeg = TargetPath.GetSegment(i);
+				const FPropertyBindingPathSegment& ChildSeg = Binding.TargetPath.GetSegment(i);
+
+				if (ParentSeg.GetName() != ChildSeg.GetName() || ParentSeg.GetArrayIndex() != ChildSeg.GetArrayIndex())
+				{
+					return false; // Paths diverge, so it's not a child.
+				}
+			}
+
+			// If all segments of the Target match the beginning of this binding, it's a child. Remove it!
+			return true;
+		});
+
 	// If a binding already exists for this target, update it
 	for (FScriptablePropertyBinding& Binding : Bindings)
 	{
