@@ -4,12 +4,13 @@
 #include "PropertyBindingDataView.h"
 #include "ScriptableObject.h"
 #include "StructUtils/PropertyBag.h"
+#include "UObject/StructOnScope.h"
 
 // ------------------------------------------------------------------------------------------------
 // Helper to resolve paths manually, bypassing Unreal's native black-box function.
 // This supports diving into FInstancedPropertyBags no matter what parent struct they live inside.
 // ------------------------------------------------------------------------------------------------
-static bool ResolveIndirections(const FPropertyBindingPath& Path, const FPropertyBindingDataView& View, const FProperty*& OutProp, void*& OutAddr)
+static bool ResolveIndirections(const FPropertyBindingPath& Path, const FPropertyBindingDataView& View, const FProperty*& OutProp, void*& OutAddr, TArray<TSharedPtr<FStructOnScope>>& OutTempMemoryArray)
 {
 	if (!View.IsValid() || Path.IsPathEmpty()) return false;
 
@@ -22,7 +23,59 @@ static bool ResolveIndirections(const FPropertyBindingPath& Path, const FPropert
 
 		// Find the property in the current struct context
 		const FProperty* Prop = CurrentStruct->FindPropertyByName(Segment.GetName());
-		if (!Prop) return false; // Path is broken
+
+		// -----------------------------------------------------------------
+		// Function Fallback (Valid ANYWHERE in the chain)
+		// -----------------------------------------------------------------
+		if (!Prop)
+		{
+			if (const UClass* CurrentClass = Cast<UClass>(CurrentStruct))
+			{
+				if (UFunction* Func = CurrentClass->FindFunctionByName(Segment.GetName()))
+				{
+					const FProperty* ReturnProp = Func->GetReturnProperty();
+					if (!ReturnProp) return false;
+
+					// Allocate memory for this function execution and keep it alive in the array
+					TSharedPtr<FStructOnScope> TempScope = MakeShared<FStructOnScope>(Func);
+					OutTempMemoryArray.Add(TempScope);
+
+					UObject* TargetObj = static_cast<UObject*>(CurrentAddr);
+					TargetObj->ProcessEvent(Func, TempScope->GetStructMemory());
+
+					// The memory for the next segment is the return value of the function
+					void* RetAddr = ReturnProp->ContainerPtrToValuePtr<void>(TempScope->GetStructMemory());
+
+					if (i == Path.NumSegments() - 1)
+					{
+						// It was the last segment in the chain!
+						OutProp = ReturnProp;
+						OutAddr = RetAddr;
+						return true;
+					}
+					else
+					{
+						// It's mid-path (e.g. GetTransform().Translation). Prepare for the next segment.
+						if (const FStructProperty* StructProp = CastField<FStructProperty>(ReturnProp))
+						{
+							CurrentStruct = StructProp->Struct;
+							CurrentAddr = RetAddr;
+							continue;
+						}
+						else if (const FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(ReturnProp))
+						{
+							UObject* RetObj = ObjProp->GetObjectPropertyValue(RetAddr);
+							if (!RetObj) return false;
+							CurrentStruct = RetObj->GetClass();
+							CurrentAddr = RetObj;
+							continue;
+						}
+						else return false; // A primitive was returned but the path continues (Invalid)
+					}
+				}
+			}
+			return false; // Path is completely broken
+		}
 
 		// Advance the memory pointer to this property
 		void* PropAddr = Prop->ContainerPtrToValuePtr<void>(CurrentAddr);
@@ -180,15 +233,17 @@ void FScriptablePropertyBindings::SanitizeObsoleteBindings(UScriptableObject* Ta
 	// Create a data view of this object to navigate through its memory
 	FPropertyBindingDataView TargetView(TargetObject);
 
+	// Iterate backwards because we will be removing elements from the array
 	for (int32 i = Bindings.Num() - 1; i >= 0; --i)
 	{
 		const FScriptablePropertyBinding& Binding = Bindings[i];
 
 		const FProperty* OutProp = nullptr;
 		void* OutAddr = nullptr;
+		TArray<TSharedPtr<FStructOnScope>> TempMemoryArray;
 
 		// If resolving the TargetPath fails, it means the variable or its parent struct has been deleted.
-		if (!ResolveIndirections(Binding.TargetPath, TargetView, OutProp, OutAddr))
+		if (!ResolveIndirections(Binding.TargetPath, TargetView, OutProp, OutAddr, TempMemoryArray))
 		{
 			Bindings.RemoveAt(i);
 		}
@@ -308,15 +363,17 @@ void FScriptablePropertyBindings::CopySingleBinding(const FScriptablePropertyBin
 {
 	const FProperty* SourceProp = nullptr;
 	void* SourceAddr = nullptr;
+	TArray<TSharedPtr<FStructOnScope>> TempMemoryArray;
 
-	// Path resolution for the Source
-	if (!ResolveIndirections(Binding.SourcePath, SrcView, SourceProp, SourceAddr)) return;
+	// Path resolution for the Source (Executes functions natively mid-path)
+	if (!ResolveIndirections(Binding.SourcePath, SrcView, SourceProp, SourceAddr, TempMemoryArray)) return;
 
 	const FProperty* TargetProp = nullptr;
 	void* TargetAddr = nullptr;
+	TArray<TSharedPtr<FStructOnScope>> TargetTempMemoryArray; // Targets shouldn't have functions, but required by signature
 
 	// Path resolution for the Target
-	if (!ResolveIndirections(Binding.TargetPath, DestView, TargetProp, TargetAddr)) return;
+	if (!ResolveIndirections(Binding.TargetPath, DestView, TargetProp, TargetAddr, TargetTempMemoryArray)) return;
 
 	if (SourceProp && TargetProp && SourceAddr && TargetAddr)
 	{

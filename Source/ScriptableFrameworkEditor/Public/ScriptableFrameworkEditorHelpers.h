@@ -33,6 +33,12 @@ namespace ScriptableFrameworkEditor
 	/** Checks if two properties are compatible for binding. */
 	bool ArePropertiesCompatible(const FProperty* SourceProp, const FProperty* TargetProp);
 
+	/** Validates if a binding path exists and returns the final (Leaf) property for type checking. */
+	bool ValidateBindingPath(const UStruct* ContextStruct, const FPropertyBindingPath* Path, const FProperty*& OutLeafProperty);
+
+	/** Generates a clean text for the UI, hiding "K2_" prefixes. */
+	FText GetCleanBindingPathText(const FPropertyBindingPath* Path);
+
 	/** Finds the owning ScriptableObject from a property handle (handling inner objects). */
 	UScriptableObject* GetOuterScriptableObject(const TSharedPtr<const IPropertyHandle>& InPropertyHandle);
 

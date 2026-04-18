@@ -134,35 +134,24 @@ namespace ScriptableBindingUI
 					bool bIsPathValid = false;
 					bool bIsTypeCompatible = false;
 
-					FString DisplayString = TEXT("Unknown");
-
 					if (SourceDesc)
 					{
-						DisplayString = SourceDesc->Name.ToString();
+						// Use Helper for validation
+						const FProperty* SourceProp = nullptr;
+						bIsPathValid = ScriptableFrameworkEditor::ValidateBindingPath(SourceDesc->Struct.Get(), SourcePath, SourceProp);
 
-						// Create a dummy view (only types) to validate the path
-						FPropertyBindingDataView DummyView(SourceDesc->Struct, nullptr);
-
-						TArray<FPropertyBindingPathIndirection> Indirections;
-						if (SourcePath->ResolveIndirectionsWithValue(DummyView, Indirections))
+						if (bIsPathValid && SourceProp)
 						{
-							bIsPathValid = true;
-
-							if (Indirections.Num() > 0)
+							if (ScriptableFrameworkEditor::ArePropertiesCompatible(SourceProp, Prop))
 							{
-								const FProperty* SourceProp = Indirections.Last().GetProperty();
-
-								if (ScriptableFrameworkEditor::ArePropertiesCompatible(SourceProp, Prop))
-								{
-									bIsTypeCompatible = true;
-								}
+								bIsTypeCompatible = true;
 							}
 						}
 					}
 
 					if (!SourceDesc || !bIsPathValid)
 					{
-						TooltipText = LOCTEXT("BindingErrorTooltip", "ERROR: The source property is missing.");
+						TooltipText = LOCTEXT("BindingErrorTooltip", "ERROR: The source property or function is missing.");
 						Image = FAppStyle::GetBrush("Icons.Error");
 						Color = FLinearColor::Red;
 					}
@@ -174,21 +163,13 @@ namespace ScriptableBindingUI
 					}
 					else
 					{
-						if (!SourcePath->IsPathEmpty())
-						{
-							DisplayString += TEXT(".") + SourcePath->ToString();
-						}
+						// Use Helper for clean string formatting
+						FString DisplayString = SourceDesc->Name.ToString() + TEXT(".") + ScriptableFrameworkEditor::GetCleanBindingPathText(SourcePath).ToString();
 
 						Text = FText::FromString(DisplayString);
 						TooltipText = FText::Format(LOCTEXT("BindingTooltip", "Bound to {0}"), Text);
 						Image = FAppStyle::GetBrush(PropertyIcon);
 						Color = Schema->GetPinTypeColor(PinType);
-					}
-
-					if (Text.IsEmpty())
-					{
-						if (!SourcePath->IsPathEmpty()) DisplayString += TEXT(".") + SourcePath->ToString();
-						Text = FText::FromString(DisplayString);
 					}
 				}
 			}
@@ -300,8 +281,47 @@ namespace ScriptableBindingUI
 		Args.bGeneratePureBindings = true;
 		Args.bAllowStructMemberBindings = true;
 		Args.bAllowUObjectFunctions = true;
+		Args.bAllowStructFunctions = true;
+		Args.bAllowFunctionBindings = true;
 
 		Args.OnCanBindToClass = FOnCanBindToClass::CreateLambda([](UClass* InClass) { return true; });
+
+		Args.OnCanBindFunction = FOnCanBindFunction::CreateLambda([CachedData](UFunction* InFunction)
+			{
+				if (!InFunction) return false;
+
+				// A. We only want "Pure" or "Const" functions (that return a value without execution pins)
+				if (!InFunction->HasAnyFunctionFlags(FUNC_BlueprintPure | FUNC_Const))
+				{
+					return false;
+				}
+
+				bool bHasInputs = false;
+				FProperty* ReturnProp = nullptr;
+
+				// B. Scan the function's parameters
+				for (TFieldIterator<FProperty> PropIt(InFunction); PropIt; ++PropIt)
+				{
+					if (PropIt->HasAnyPropertyFlags(CPF_ReturnParm))
+					{
+						// We found the return value (e.g., FVector in GetActorLocation)
+						ReturnProp = *PropIt;
+					}
+					else if (PropIt->HasAnyPropertyFlags(CPF_Parm))
+					{
+						// It has input pins that would need to be filled manually. Discard it.
+						bHasInputs = true;
+					}
+				}
+
+				if (bHasInputs || !ReturnProp)
+				{
+					return false;
+				}
+
+				// C. Finally, check if the return type is compatible with our target property
+				return ScriptableFrameworkEditor::ArePropertiesCompatible(ReturnProp, CachedData->GetProperty());
+			});
 
 		Args.OnCanBindToContextStructWithIndex = FOnCanBindToContextStructWithIndex::CreateLambda([CachedData](const UStruct* InStruct, int32 Index)
 		{

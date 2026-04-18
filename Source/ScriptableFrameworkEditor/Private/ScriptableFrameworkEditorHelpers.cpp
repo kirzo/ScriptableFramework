@@ -227,6 +227,93 @@ namespace ScriptableFrameworkEditor
 		return false;
 	}
 
+	bool ValidateBindingPath(const UStruct* ContextStruct, const FPropertyBindingPath* Path, const FProperty*& OutLeafProperty)
+	{
+		if (!ContextStruct || !Path) return false;
+
+		const UStruct* CurrentStruct = ContextStruct;
+		const FProperty* CurrentProp = nullptr;
+
+		for (int32 i = 0; i < Path->NumSegments(); ++i)
+		{
+			if (!CurrentStruct) return false;
+
+			const FPropertyBindingPathSegment& Segment = Path->GetSegment(i);
+			const FName SegName = Segment.GetName();
+
+			// 1. Check if it's a standard property
+			if (const FProperty* FoundProp = CurrentStruct->FindPropertyByName(SegName))
+			{
+				CurrentProp = FoundProp;
+			}
+			// 2. Check if it's a Function (Functions only live in UClasses)
+			else if (const UClass* CurrentClass = Cast<UClass>(CurrentStruct))
+			{
+				if (UFunction* Func = CurrentClass->FindFunctionByName(SegName))
+				{
+					CurrentProp = Func->GetReturnProperty();
+					if (!CurrentProp) return false; // If the function returns nothing, the path is invalid
+				}
+				else return false;
+			}
+			else return false;
+
+			// 3. Resolve if we are accessing an Array index
+			if (Segment.GetArrayIndex() != INDEX_NONE)
+			{
+				if (const FArrayProperty* ArrayProp = CastField<FArrayProperty>(CurrentProp))
+				{
+					CurrentProp = ArrayProp->Inner;
+				}
+				else return false;
+			}
+
+			// 4. Prepare CurrentStruct for the next loop iteration
+			if (i < Path->NumSegments() - 1)
+			{
+				if (const FStructProperty* StructProp = CastField<FStructProperty>(CurrentProp))
+				{
+					CurrentStruct = StructProp->Struct;
+				}
+				else if (const FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(CurrentProp))
+				{
+					CurrentStruct = ObjProp->PropertyClass;
+				}
+				else return false; // We reached a primitive type (e.g. Float) but the path continues, error.
+			}
+		}
+
+		OutLeafProperty = CurrentProp;
+		return true;
+	}
+
+	FText GetCleanBindingPathText(const FPropertyBindingPath* Path)
+	{
+		if (!Path || Path->IsPathEmpty()) return FText::GetEmpty();
+
+		FString DisplayString;
+		for (const FPropertyBindingPathSegment& Seg : Path->GetSegments())
+		{
+			FString SegStr = Seg.GetName().ToString();
+
+			// Remove ugly Blueprint prefixes
+			if (SegStr.StartsWith(TEXT("K2_")))
+			{
+				SegStr = SegStr.Mid(3);
+			}
+
+			if (Seg.GetArrayIndex() != INDEX_NONE)
+			{
+				SegStr += FString::Printf(TEXT("[%d]"), Seg.GetArrayIndex());
+			}
+
+			if (!DisplayString.IsEmpty()) DisplayString += TEXT(".");
+			DisplayString += SegStr;
+		}
+
+		return FText::FromString(DisplayString);
+	}
+
 	UScriptableObject* GetOuterScriptableObject(const TSharedPtr<const IPropertyHandle>& InPropertyHandle)
 	{
 		TArray<UObject*> OuterObjects;
@@ -724,9 +811,15 @@ namespace ScriptableFrameworkEditor
 
 		for (const FBindingChainElement& Element : InBindingChain)
 		{
+			// Check if the element is a standard property
 			if (const FProperty* Property = Element.Field.Get<FProperty>())
 			{
 				OutPath.AddPathSegment(Property->GetFName(), Element.ArrayIndex);
+			}
+			// Check if the element is a function (e.g., K2_GetActorLocation)
+			else if (const UFunction* Function = Element.Field.Get<UFunction>())
+			{
+				OutPath.AddPathSegment(Function->GetFName(), Element.ArrayIndex);
 			}
 		}
 	}
