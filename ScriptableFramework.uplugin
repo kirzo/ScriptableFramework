@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "1.0",
+	"VersionName": "1.1",
 	"FriendlyName": "ScriptableFramework",
 	"Description": "Data-driven logic system for Unreal Engine. It empowers designers and programmers to embed modular logic sequences (Actions) and validation rules (Requirements) directly into Actors, Data Assets, or any UObject, without the overhead of creating unique Blueprint graphs for every specific interaction.",
 	"Category": "Scripting",
