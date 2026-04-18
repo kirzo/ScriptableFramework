@@ -26,11 +26,16 @@ static bool ArePropertiesCompatible(const FProperty* InputProp, const FProperty*
 		return InputStruct->Struct == TargetStruct->Struct;
 	}
 
-	// Object check (Allow Child -> Parent).
+	// Object check (Allow Child -> Parent AND Parent -> Child for QoL).
 	if (const FObjectPropertyBase* InputObj = CastField<FObjectPropertyBase>(InputProp))
 	{
 		const FObjectPropertyBase* TargetObj = CastField<const FObjectPropertyBase>(TargetProp);
-		return InputObj->PropertyClass->IsChildOf(TargetObj->PropertyClass);
+
+		// Allow standard Child -> Parent (e.g., AActor -> UObject)
+		// AND Parent -> Child (e.g., UObject -> AActor) to avoid explicit Cast nodes in Blueprints.
+		// The actual safety cast will be performed dynamically at runtime.
+		return InputObj->PropertyClass->IsChildOf(TargetObj->PropertyClass) ||
+			TargetObj->PropertyClass->IsChildOf(InputObj->PropertyClass);
 	}
 
 	// Array check.
@@ -53,28 +58,26 @@ static bool ArePropertiesCompatible(const FProperty* InputProp, const FProperty*
 // Helper function to process context parameter assignment for any scriptable container.
 static void AssignContextParameterToContainer(FFrame& Stack, const UScriptStruct* ExpectedStructType, const FString& FunctionName)
 {
-	// Retrieve the strongly typed container struct.
+	// 1. Retrieve the strongly typed container struct.
 	Stack.StepCompiledIn<FStructProperty>(nullptr);
 	FStructProperty* ContainerProp = CastField<FStructProperty>(Stack.MostRecentProperty);
 	void* ContainerPtr = Stack.MostRecentPropertyAddress;
 
-	// Retrieve the parameter name.
+	// 2. Retrieve the parameter name.
 	P_GET_PROPERTY(FNameProperty, ParameterName);
 
-	// Retrieve the wildcard value.
-	Stack.StepCompiledIn<FProperty>(nullptr);
-	FProperty* ValueProp = Stack.MostRecentProperty;
-	void* ValuePtr = Stack.MostRecentPropertyAddress;
-
-	P_FINISH;
-
-	if (!ContainerProp || !ContainerPtr || !ValueProp || !ValuePtr)
+	if (!ContainerProp || !ContainerPtr)
 	{
+		// Step to clear the stack if we abort early
+		Stack.StepCompiledIn<FProperty>(nullptr);
+		P_FINISH;
 		return;
 	}
 
 	if (!ContainerProp->Struct->IsChildOf(ExpectedStructType))
 	{
+		Stack.StepCompiledIn<FProperty>(nullptr);
+		P_FINISH;
 		return;
 	}
 
@@ -87,25 +90,35 @@ static void AssignContextParameterToContainer(FFrame& Stack, const UScriptStruct
 		Container->ConstructContext();
 	}
 
-	// Perform manual memory copy to bypass PropertyBag SetValue abstraction issues.
 	const UScriptStruct* BagStruct = Container->Context.GetPropertyBagStruct();
 	const FProperty* BagProp = BagStruct ? BagStruct->FindPropertyByName(ParameterName) : nullptr;
 
 	if (!BagProp)
 	{
+		// Step to clear the stack
+		Stack.StepCompiledIn<FProperty>(nullptr);
+		P_FINISH;
 #if WITH_EDITOR
 		FFrame::KismetExecutionMessage(*FString::Printf(TEXT("%s: Parameter '%s' not found in ContextDefinitions."), *FunctionName, *ParameterName.ToString()), ELogVerbosity::Warning);
 #endif
 		return;
 	}
 
-	if (!ArePropertiesCompatible(ValueProp, BagProp))
-	{
-#if WITH_EDITOR
-		FFrame::KismetExecutionMessage(*FString::Printf(TEXT("%s: Type mismatch for parameter '%s'."), *FunctionName, *ParameterName.ToString()), ELogVerbosity::Warning);
-#endif
-		return;
-	}
+	// 3. Evaluate Value into a local buffer based on the expected BagProp size.
+	// This PREVENTS the "Attempted to reference 'self' as an addressable property" crash
+	// by giving R-Values (like 'self' or Math functions) a valid memory space to write into.
+	void* LocalValue = FMemory_Alloca(BagProp->GetSize());
+	BagProp->InitializeValue(LocalValue);
+
+	Stack.MostRecentPropertyAddress = nullptr;
+	Stack.MostRecentProperty = nullptr;
+
+	Stack.StepCompiledIn<FProperty>(LocalValue);
+
+	FProperty* ValueProp = Stack.MostRecentProperty;
+	void* ValuePtr = (Stack.MostRecentPropertyAddress != nullptr) ? Stack.MostRecentPropertyAddress : LocalValue;
+
+	P_FINISH;
 
 	FStructView MutableStruct = Container->Context.GetMutableValue();
 	uint8* StructMemory = MutableStruct.GetMemory();
@@ -113,8 +126,60 @@ static void AssignContextParameterToContainer(FFrame& Stack, const UScriptStruct
 	if (StructMemory)
 	{
 		uint8* DestPtr = BagProp->ContainerPtrToValuePtr<uint8>(StructMemory);
-		BagProp->CopyCompleteValue(DestPtr, ValuePtr);
+
+		// If ValueProp is valid, do the rigorous compatibility check
+		if (ValueProp && !ArePropertiesCompatible(ValueProp, BagProp))
+		{
+#if WITH_EDITOR
+			FFrame::KismetExecutionMessage(*FString::Printf(TEXT("%s: Type mismatch for parameter '%s'."), *FunctionName, *ParameterName.ToString()), ELogVerbosity::Warning);
+#endif
+		}
+		else
+		{
+			// --- QoL: Safe Internal Object Casting ---
+			if (const FObjectPropertyBase* TargetObjProp = CastField<FObjectPropertyBase>(BagProp))
+			{
+				UObject* SourceObject = nullptr;
+
+				// Extract UObject from ValuePtr depending on whether ValueProp was valid (Variables) or Null (R-Values like 'self')
+				if (const FObjectPropertyBase* SourceObjProp = CastField<FObjectPropertyBase>(ValueProp))
+				{
+					SourceObject = SourceObjProp->GetObjectPropertyValue(ValuePtr);
+				}
+				else if (!ValueProp)
+				{
+					// It's an R-Value (e.g. 'self'). ValuePtr directly points to the memory where EX_Self wrote the UObject*.
+					SourceObject = *(UObject**)ValuePtr;
+				}
+
+				// Check if the runtime instance is actually a match for the target class
+				if (SourceObject && SourceObject->IsA(TargetObjProp->PropertyClass))
+				{
+					TargetObjProp->SetObjectPropertyValue(DestPtr, SourceObject);
+				}
+				else
+				{
+					// Safe failure: assign nullptr and warn
+					TargetObjProp->SetObjectPropertyValue(DestPtr, nullptr);
+
+					if (SourceObject)
+					{
+#if WITH_EDITOR
+						FFrame::KismetExecutionMessage(*FString::Printf(TEXT("%s: Runtime cast failed for parameter '%s'. Passed object '%s' is not of type '%s'."), *FunctionName, *ParameterName.ToString(), *SourceObject->GetName(), *TargetObjProp->PropertyClass->GetName()), ELogVerbosity::Warning);
+#endif
+					}
+				}
+			}
+			else
+			{
+				// --- Standard Assignment for other types (Primitives, Structs, Arrays) ---
+				BagProp->CopyCompleteValue(DestPtr, ValuePtr);
+			}
+		}
 	}
+
+	// Always clean up the local memory to prevent memory leaks with Arrays/Strings
+	BagProp->DestroyValue(LocalValue);
 }
 
 // --- Thunk Implementations ---
