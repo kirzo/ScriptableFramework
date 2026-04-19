@@ -93,7 +93,7 @@ class SCRIPTABLEFRAMEWORK_API UScriptableCondition_IsValid : public UScriptableC
 
 public:
 	/** The object to validate. */
-	UPROPERTY(EditAnywhere, Category = "Config")
+	UPROPERTY(EditAnywhere, Category = "Config", meta = (ScriptableContext))
 	TObjectPtr<UObject> TargetObject = nullptr;
 
 #if WITH_EDITOR

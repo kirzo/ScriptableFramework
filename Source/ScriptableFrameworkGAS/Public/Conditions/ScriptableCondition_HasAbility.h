@@ -15,7 +15,7 @@ class SCRIPTABLEFRAMEWORKGAS_API UScriptableCondition_HasAbility : public UScrip
 
 protected:
 	/** Actor to check. */
-	UPROPERTY(EditAnywhere, Category = "Ability")
+	UPROPERTY(EditAnywhere, Category = "Ability", meta = (ScriptableContext))
 	TObjectPtr<AActor> TargetActor;
 
 	/** The Gameplay Ability Class to check for. */

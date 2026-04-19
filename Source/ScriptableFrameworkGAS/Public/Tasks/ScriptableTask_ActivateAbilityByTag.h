@@ -15,7 +15,7 @@ class SCRIPTABLEFRAMEWORKGAS_API UScriptableTask_ActivateAbilityByTag : public U
 
 public:
 	/** The actor whose Ability System Component will activate the ability. */
-	UPROPERTY(EditAnywhere, Category = "Ability")
+	UPROPERTY(EditAnywhere, Category = "Ability", meta = (ScriptableContext))
 	TObjectPtr<AActor> TargetActor;
 
 	/** The Ability Tag of the Gameplay Ability to activate. */

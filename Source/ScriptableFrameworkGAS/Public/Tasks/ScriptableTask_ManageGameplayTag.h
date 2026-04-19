@@ -21,7 +21,7 @@ class SCRIPTABLEFRAMEWORKGAS_API UScriptableTask_ManageGameplayTag : public UScr
 
 public:
 	/** The actor whose tags will be modified. */
-	UPROPERTY(EditAnywhere, Category = "Tag Operation")
+	UPROPERTY(EditAnywhere, Category = "Tag Operation", meta = (ScriptableContext))
 	TObjectPtr<AActor> TargetActor;
 
 	/** The container of tags to add or remove. */

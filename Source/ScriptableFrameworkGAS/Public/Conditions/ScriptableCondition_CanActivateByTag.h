@@ -18,7 +18,7 @@ class SCRIPTABLEFRAMEWORKGAS_API UScriptableCondition_CanActivateByTag : public 
 
 protected:
 	/** The actor whose Ability System Component will be checked. */
-	UPROPERTY(EditAnywhere, Category = "Condition")
+	UPROPERTY(EditAnywhere, Category = "Condition", meta = (ScriptableContext))
 	TObjectPtr<AActor> TargetActor;
 
 	/** The native Ability Tag that categorizes the target ability. */

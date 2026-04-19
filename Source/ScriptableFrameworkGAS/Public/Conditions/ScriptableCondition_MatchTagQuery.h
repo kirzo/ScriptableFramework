@@ -15,7 +15,7 @@ class SCRIPTABLEFRAMEWORKGAS_API UScriptableCondition_MatchTagQuery : public USc
 
 protected:
 	/** Actor to check. */
-	UPROPERTY(EditAnywhere, Category = "Condition")
+	UPROPERTY(EditAnywhere, Category = "Condition", meta = (ScriptableContext))
 	TObjectPtr<AActor> TargetActor;
 
 	/** Tags on the TargetActor that need to match this query for the condition to evaluate true. */

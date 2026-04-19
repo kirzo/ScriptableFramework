@@ -17,7 +17,7 @@ class SCRIPTABLEFRAMEWORKGAS_API UScriptableTask_GrantAbility : public UScriptab
 
 public:
 	/** The actor that will receive the ability. */
-	UPROPERTY(EditAnywhere, Category = "Ability")
+	UPROPERTY(EditAnywhere, Category = "Ability", meta = (ScriptableContext))
 	TObjectPtr<AActor> TargetActor;
 
 	/** The Gameplay Ability class to grant. */

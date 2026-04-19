@@ -18,7 +18,7 @@ class SCRIPTABLEFRAMEWORKAI_API UScriptableTask_RunStateTree : public UScriptabl
 
 public:
 	/** The actor whose StateTree we want to run. */
-	UPROPERTY(EditAnywhere, Category = "StateTree")
+	UPROPERTY(EditAnywhere, Category = "StateTree", meta = (ScriptableContext))
 	TObjectPtr<AActor> TargetActor;
 
 	/** The StateTree asset and its parameters to assign and execute. */

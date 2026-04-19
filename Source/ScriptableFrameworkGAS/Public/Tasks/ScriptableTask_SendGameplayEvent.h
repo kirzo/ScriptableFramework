@@ -15,7 +15,7 @@ class SCRIPTABLEFRAMEWORKGAS_API UScriptableTask_SendGameplayEvent : public UScr
 
 public:
 	/** The actor that will receive the gameplay event. */
-	UPROPERTY(EditAnywhere, Category = "Event")
+	UPROPERTY(EditAnywhere, Category = "Event", meta = (ScriptableContext))
 	TObjectPtr<AActor> TargetActor;
 
 	/** The tag of the event to send. */
