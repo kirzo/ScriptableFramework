@@ -2,6 +2,7 @@
 
 #include "ScriptableFrameworkValidator.h"
 #include "ScriptableObject.h"
+#include "ScriptablePropertyUtilities.h"
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "Bindings/ScriptablePropertyBindings.h"
 #include "Engine/Blueprint.h"
@@ -56,15 +57,15 @@ EDataValidationResult UScriptableFrameworkValidator::ValidateLoadedAsset_Impleme
 
 		// Rebuild available contexts without relying on UI Handles
 		TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
-		ScriptableFrameworkEditor::GetAccessibleStructs_Headless(Obj, AccessibleStructs);
+		FScriptablePropertyUtilities::GatherAccessibleStructs(Obj, AccessibleStructs);
 
 		// Iterate through all properties of the ScriptableObject
 		for (TFieldIterator<FProperty> It(Obj->GetClass()); It; ++It)
 		{
 			const FProperty* Prop = *It;
 
-			const bool bIsInput = ScriptableFrameworkEditor::IsPropertyBindableInput(Prop);
-			const bool bIsContext = ScriptableFrameworkEditor::IsPropertyBindableContext(Prop);
+			const bool bIsInput = FScriptablePropertyUtilities::IsPropertyBindableInput(Prop);
+			const bool bIsContext = FScriptablePropertyUtilities::IsPropertyBindableContext(Prop);
 
 			if (!bIsInput && !bIsContext) continue;
 
@@ -93,12 +94,7 @@ EDataValidationResult UScriptableFrameworkValidator::ValidateLoadedAsset_Impleme
 			else if (bIsContext && !bIsManuallyBound)
 			{
 				FPropertyBindingPath AutoBindingPath;
-				if (ScriptableFrameworkEditor::TryDiscoverAutoBinding(Prop, AccessibleStructs, AutoBindingPath))
-				{
-					// Baking: Inject the discovered binding dynamically so the Runtime can access it
-					Obj->GetPropertyBindings().AddPropertyBinding(AutoBindingPath, TargetPath, true /* bIsAutoBinding */);
-				}
-				else
+				if (!FScriptablePropertyUtilities::FindAutoBindingPath(Prop, AccessibleStructs, AutoBindingPath))
 				{
 					// Resolution failed and no manual override exists
 					const FText ErrorText = FText::Format(

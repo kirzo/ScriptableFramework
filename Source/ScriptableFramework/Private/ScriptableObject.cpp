@@ -1,9 +1,12 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableObject.h"
+#include "ScriptableContainer.h"
+#include "ScriptablePropertyUtilities.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Misc/SecureHash.h"
+#include "UObject/ObjectSaveContext.h"
 
 DEFINE_LOG_CATEGORY(LogScriptableObject);
 
@@ -64,6 +67,68 @@ void UScriptableObject::PostEditImport()
 }
 
 #if WITH_EDITOR
+void UScriptableObject::BakeAutoBindings()
+{
+	// We allow Archetypes because objects edited inside a Blueprint Editor ARE Archetypes.
+	// We only skip the pure C++ Class Default Object (CDO) to save useless processing.
+	if (HasAnyFlags(RF_ClassDefaultObject) && !GetClass()->HasAnyClassFlags(CLASS_CompiledFromBlueprint))
+	{
+		return;
+	}
+
+	bool bChanged = false;
+
+	// 1. Purge existing automatic bindings to prevent stale data
+	GetPropertyBindings().ClearAutoBindings();
+
+	// 2. Gather all accessible external contexts
+	TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
+	FScriptablePropertyUtilities::GatherAccessibleStructs(this, AccessibleStructs);
+
+	// 3. Iterate through all properties to rebuild auto-bindings
+	for (TFieldIterator<FProperty> It(GetClass()); It; ++It)
+	{
+		const FProperty* Prop = *It;
+
+		if (FScriptablePropertyUtilities::IsPropertyBindableContext(Prop))
+		{
+			FPropertyBindingPath TargetPath;
+			TargetPath.SetStructID(GetBindingID());
+			TargetPath.AddPathSegment(Prop->GetFName());
+
+			// If it does NOT have a manual override
+			if (!GetPropertyBindings().HasManualPropertyBinding(TargetPath))
+			{
+				FPropertyBindingPath AutoPath;
+				if (FScriptablePropertyUtilities::FindAutoBindingPath(Prop, AccessibleStructs, AutoPath))
+				{
+					// Inject the discovered binding explicitly marking it as Automatic
+					GetPropertyBindings().AddPropertyBinding(AutoPath, TargetPath, true);
+					bChanged = true;
+				}
+			}
+		}
+	}
+
+	// Flag the object as modified so the serialization system knows it needs saving
+	if (bChanged)
+	{
+		Modify();
+	}
+}
+
+void UScriptableObject::PreSave(FObjectPreSaveContext SaveContext)
+{
+	Super::PreSave(SaveContext);
+	BakeAutoBindings();
+}
+
+void UScriptableObject::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+	BakeAutoBindings();
+}
+
 void UScriptableObject::PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent)
 {
 	Super::PostEditChangeChainProperty(PropertyChangedEvent);
@@ -95,6 +160,14 @@ void UScriptableObject::PostEditChangeChainProperty(FPropertyChangedChainEvent& 
 			}
 		}
 	}
+
+	BakeAutoBindings();
+}
+
+void UScriptableObject::PostDuplicate(bool bDuplicateForPIE)
+{
+	Super::PostDuplicate(bDuplicateForPIE);
+	BakeAutoBindings();
 }
 
 FText UScriptableObject::GetDisplayTitle() const
@@ -109,8 +182,28 @@ bool UScriptableObject::GetBindingDisplayText(FName PropertyName, FString& OutTe
 	TargetPath.SetStructID(GetBindingID());
 	TargetPath.AddPathSegment(PropertyName);
 
+	const FPropertyBindingPath* SourcePath = GetPropertyBindings().GetPropertyBinding(TargetPath);
+
+	// If no explicit binding is cached yet (e.g., node just dropped in the graph),
+	// attempt to dynamically discover the automatic binding.
+	if (!SourcePath)
+	{
+		if (const FProperty* Prop = GetClass()->FindPropertyByName(PropertyName))
+		{
+			// Build the accessible structs array for external context search
+			TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
+			FScriptablePropertyUtilities::GatherAccessibleStructs(this, AccessibleStructs);
+			
+			FPropertyBindingPath DiscoveredPath;
+			if (FScriptablePropertyUtilities::FindAutoBindingPath(Prop, AccessibleStructs, DiscoveredPath))
+			{
+				SourcePath = &DiscoveredPath;
+			}
+		}
+	}
+
 	// Check if there is a binding for this property
-	if (const FPropertyBindingPath* SourcePath = GetPropertyBindings().GetPropertyBinding(TargetPath))
+	if (SourcePath)
 	{
 		FString FullPath = SourcePath->ToString();
 
@@ -130,6 +223,15 @@ bool UScriptableObject::GetBindingDisplayText(FName PropertyName, FString& OutTe
 		else
 		{
 			OutText = FullPath;
+		}
+
+		int32 LastUnderscoreIndex;
+		if (OutText.FindLastChar('_', LastUnderscoreIndex))
+		{
+			if (OutText.RightChop(LastUnderscoreIndex + 1).IsNumeric())
+			{
+				OutText = OutText.Left(LastUnderscoreIndex);
+			}
 		}
 
 		return true;

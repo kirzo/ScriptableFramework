@@ -3,6 +3,7 @@
 #include "ScriptableFrameworkEd/Customization/ScriptableObjectCustomization.h"
 #include "ScriptableObject.h"
 #include "Bindings/ScriptablePropertyBindings.h"
+#include "ScriptablePropertyUtilities.h"
 #include "PropertyBindingPath.h"
 #include "PropertyBindingDataView.h"
 
@@ -124,7 +125,7 @@ namespace ScriptableBindingUI
 			FEdGraphPinType PinType;
 			Schema->ConvertPropertyToPinType(Prop, PinType);
 
-			if (Bindings.HasPropertyBinding(TargetPath)) // Bound
+			if (Bindings.HasManualPropertyBinding(TargetPath)) // Bound
 			{
 				const FPropertyBindingPath* SourcePath = Bindings.GetPropertyBinding(TargetPath);
 				if (SourcePath)
@@ -142,7 +143,7 @@ namespace ScriptableBindingUI
 
 						if (bIsPathValid && SourceProp)
 						{
-							if (ScriptableFrameworkEditor::ArePropertiesCompatible(SourceProp, Prop))
+							if (FScriptablePropertyUtilities::ArePropertiesCompatible(SourceProp, Prop))
 							{
 								bIsTypeCompatible = true;
 							}
@@ -173,7 +174,7 @@ namespace ScriptableBindingUI
 					}
 				}
 			}
-			else // Unbound
+			else // Unbound (or Auto-Bound)
 			{
 				Text = FText::GetEmpty();
 				TooltipText = LOCTEXT("BindActionTooltip", "Bind this property to a value from the Context or a sibling node.");
@@ -245,7 +246,7 @@ namespace ScriptableBindingUI
 		{
 			if (UScriptableObject* ScriptableObject = WeakScriptableObject.Get())
 			{
-				return ScriptableObject->GetPropertyBindings().HasPropertyBinding(TargetPath);
+				return ScriptableObject->GetPropertyBindings().HasManualPropertyBinding(TargetPath);
 			}
 			return false;
 		}
@@ -320,7 +321,7 @@ namespace ScriptableBindingUI
 				}
 
 				// C. Finally, check if the return type is compatible with our target property
-				return ScriptableFrameworkEditor::ArePropertiesCompatible(ReturnProp, CachedData->GetProperty());
+				return FScriptablePropertyUtilities::ArePropertiesCompatible(ReturnProp, CachedData->GetProperty());
 			});
 
 		Args.OnCanBindToContextStructWithIndex = FOnCanBindToContextStructWithIndex::CreateLambda([CachedData](const UStruct* InStruct, int32 Index)
@@ -354,7 +355,7 @@ namespace ScriptableBindingUI
 			}
 
 			// 3. Check Type Compatibility
-			return ScriptableFrameworkEditor::ArePropertiesCompatible(InProperty, CachedData->GetProperty());
+			return FScriptablePropertyUtilities::ArePropertiesCompatible(InProperty, CachedData->GetProperty());
 		});
 
 		Args.OnCanAcceptPropertyOrChildrenWithBindingChain = FOnCanAcceptPropertyOrChildrenWithBindingChain::CreateLambda([](FProperty* InProperty, TArrayView<const FBindingChainElement>)
@@ -406,9 +407,9 @@ namespace ScriptableBindingUI
 
 		const bool bIsManuallyBound = ScriptableObject->GetPropertyBindings().HasManualPropertyBinding(CachedData->TargetPath);
 
-		const bool bIsInputProperty = ScriptableFrameworkEditor::IsPropertyBindableInput(Prop);
-		const bool bIsOutputProperty = ScriptableFrameworkEditor::IsPropertyBindableOutput(Prop);
-		const bool bIsContextCategory = ScriptableFrameworkEditor::IsPropertyBindableContext(Prop);
+		const bool bIsInputProperty = FScriptablePropertyUtilities::IsPropertyBindableInput(Prop);
+		const bool bIsOutputProperty = FScriptablePropertyUtilities::IsPropertyBindableOutput(Prop);
+		const bool bIsContextCategory = FScriptablePropertyUtilities::IsPropertyBindableContext(Prop);
 
 		// Determine Pill styling
 		FText Label;
@@ -492,7 +493,7 @@ namespace ScriptableBindingUI
 			if (bIsContextCategory)
 			{
 				FPropertyBindingPath AutoBindingPath;
-				if (ScriptableFrameworkEditor::TryDiscoverAutoBinding(Prop, CachedData->AccessibleStructs, AutoBindingPath))
+				if (FScriptablePropertyUtilities::FindAutoBindingPath(Prop, CachedData->AccessibleStructs, AutoBindingPath))
 				{
 					const FName BoundParamName = AutoBindingPath.GetSegment(AutoBindingPath.NumSegments() - 1).GetName();
 					NodeRow.ValueContent()
@@ -605,7 +606,7 @@ namespace ScriptableBindingUI
 				{
 					FScopedTransaction Transaction(LOCTEXT("Reset", "Reset Property"));
 					ScriptableObject->Modify();
-					if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(CachedData->TargetPath))
+					if (ScriptableObject->GetPropertyBindings().HasManualPropertyBinding(CachedData->TargetPath))
 					{
 						ScriptableObject->GetPropertyBindings().RemovePropertyBindings(CachedData->TargetPath);
 						if (CachedData) CachedData->Invalidate();
@@ -1220,7 +1221,7 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 	UScriptableObject* Obj = ScriptableObject.Get();
 	if (Obj)
 	{
-		ScriptableFrameworkEditor::GetAccessibleStructs(Obj, InPropertyHandle, AccessibleStructs);
+		FScriptablePropertyUtilities::GatherAccessibleStructs(Obj, AccessibleStructs);
 	}
 
 	uint32 NumberOfChild;
@@ -1639,7 +1640,7 @@ bool FScriptableObjectCustomization::GetContextWarning(FText& OutTooltip) const
 
 	// Get Available Contexts (Outer Scope)
 	TArray<FPropertyBindingBindableStructDescriptor> AvailableContexts;
-	ScriptableFrameworkEditor::GetAccessibleStructs(Wrapper, PropertyHandle, AvailableContexts);
+	FScriptablePropertyUtilities::GatherAccessibleStructs(Wrapper, AvailableContexts);
 
 	TArray<FString> MissingParams;
 
@@ -1660,7 +1661,7 @@ bool FScriptableObjectCustomization::GetContextWarning(FText& OutTooltip) const
 				{
 					// Found a variable with the same name.
 					// Now check for type compatibility.
-					if (ScriptableFrameworkEditor::ArePropertiesCompatible(SourceProp, ReqProp))
+					if (FScriptablePropertyUtilities::ArePropertiesCompatible(SourceProp, ReqProp))
 					{
 						bFound = true;
 						break;
@@ -1784,7 +1785,7 @@ void FScriptableObjectCustomization::GenerateArrayElement(TSharedRef<IPropertyHa
 		if (ScriptableFrameworkEditor::IsPropertyExtendable(ChildHandle))
 		{
 			TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
-			ScriptableFrameworkEditor::GetAccessibleStructs(Obj, ChildHandle, AccessibleStructs);
+			FScriptablePropertyUtilities::GatherAccessibleStructs(Obj, AccessibleStructs);
 			ProcessPropertyHandle(ChildHandle, ChildrenBuilder, Obj, AccessibleStructs);
 			return;
 		}
@@ -1796,7 +1797,7 @@ void FScriptableObjectCustomization::BindPropertyRow(IDetailPropertyRow& Row, TS
 {
 	// 1. Fetch available variables (Need Action Handle for this to find Context)
 	TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
-	ScriptableFrameworkEditor::GetAccessibleStructs(Obj, Handle, AccessibleStructs);
+	FScriptablePropertyUtilities::GatherAccessibleStructs(Obj, AccessibleStructs);
 
 	// 2. Paths
 	FPropertyBindingPath TargetPath;

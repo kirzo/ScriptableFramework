@@ -23,15 +23,8 @@ namespace ScriptableFrameworkEditor
 	bool IsPropertyExtendable(TSharedPtr<IPropertyHandle> InPropertyHandle);
 	void GetScriptableCategory(const UClass* ScriptableClass, FName& ClassCategoryMeta, FName& PropertyCategoryMeta);
 
-	bool IsPropertyBindableInput(const FProperty* Property);
-	bool IsPropertyBindableOutput(const FProperty* Property);
-	bool IsPropertyBindableContext(const FProperty* Property);
-
 	/** Retrieves metadata from a property handle, bubbling up to parent handles if necessary. */
 	FString GetPropertyMetaData(const TSharedPtr<IPropertyHandle>& Handle, const FName& MetaDataKey);
-
-	/** Checks if two properties are compatible for binding. */
-	bool ArePropertiesCompatible(const FProperty* SourceProp, const FProperty* TargetProp);
 
 	/** Validates if a binding path exists and returns the final (Leaf) property for type checking. */
 	bool ValidateBindingPath(const UStruct* ContextStruct, const FPropertyBindingPath* Path, const FProperty*& OutLeafProperty);
@@ -45,12 +38,6 @@ namespace ScriptableFrameworkEditor
 	/** Generates the deterministic Runtime ID (BindingID) for an object. */
 	FGuid GetScriptableObjectDataID(UScriptableObject* Owner);
 
-	/** Scans the hierarchy to find bindable sources (Action Context, Parents, Siblings). */
-	void GetAccessibleStructs(const UScriptableObject* TargetObject, const TSharedPtr<IPropertyHandle>& Handle, TArray<FPropertyBindingBindableStructDescriptor>& OutStructDescs);
-
-	/** Headless version of GetAccessibleStructs used for Data Validation. */
-	void GetAccessibleStructs_Headless(const UScriptableObject* TargetObject, TArray<FPropertyBindingBindableStructDescriptor>& OutStructDescs);
-
 	/** Generates a full binding path from a PropertyHandle (Source of Truth). */
 	void MakeStructPropertyPathFromPropertyHandle(UScriptableObject* ScriptableObject, TSharedPtr<const IPropertyHandle> InPropertyHandle, FPropertyBindingPath& OutPath);
 
@@ -59,25 +46,4 @@ namespace ScriptableFrameworkEditor
 
 	/** Helper to set the internal asset on wrapper tasks. */
 	void SetWrapperAssetProperty(TSharedPtr<IPropertyHandle> Handle, UObject* Asset);
-
-	// --- Action & Binding Helpers ---
-
-	/** Finds the PropertyHandle for the FScriptableContainer struct that contains the given child handle. */
-	TSharedPtr<IPropertyHandle> FindContainerStructHandle(TSharedPtr<IPropertyHandle> ChildHandle);
-
-	// Finds the PropertyHandle corresponding to the TargetObject by walking up ---
-	TSharedPtr<IPropertyHandle> FindObjectHandleInHierarchy(TSharedPtr<IPropertyHandle> StartHandle, const UObject* TargetObject);
-
-	// Collect siblings using Editor Handles (works for Struct Arrays)
-	void CollectSiblingsFromHandle(TSharedPtr<IPropertyHandle> ObjectHandle, TArray<const UScriptableObject*>& OutObjects);
-
-	/**
-	 * Scans the provided accessible contexts to find a suitable automatic binding
-	 * for properties marked in the "Context" category.
-	 * @param TargetProperty The property requesting the auto-binding.
-	 * @param AccessibleStructs The list of available contexts to search within.
-	 * @param OutPath The resulting path if a compatible property is found.
-	 * @return True if a compatible binding was discovered, false otherwise.
-	 */
-	bool TryDiscoverAutoBinding(const FProperty* TargetProperty, const TArray<FPropertyBindingBindableStructDescriptor>& AccessibleStructs, FPropertyBindingPath& OutPath);
 }

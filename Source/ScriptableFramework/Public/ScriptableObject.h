@@ -12,6 +12,8 @@
 
 SCRIPTABLEFRAMEWORK_API DECLARE_LOG_CATEGORY_EXTERN(LogScriptableObject, Log, All);
 
+class FObjectPreSaveContext;
+
 /** Base class for all scriptable objects in the framework. */
 UCLASS(Abstract, DefaultToInstanced, EditInlineNew, Blueprintable, BlueprintType, HideCategories = (Hidden), CollapseCategories)
 class SCRIPTABLEFRAMEWORK_API UScriptableObject : public UObject
@@ -29,8 +31,16 @@ public:
 	virtual UWorld* GetWorld() const override final { return (WorldPrivate ? WorldPrivate : GetWorld_Uncached()); }
 
 #if WITH_EDITOR
+	virtual void PreSave(FObjectPreSaveContext SaveContext) override;
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 	virtual void PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent) override;
+	virtual void PostDuplicate(bool bDuplicateForPIE) override;
 
+protected:
+	/** Centralized function to bake automatic bindings into memory. */
+	void BakeAutoBindings();
+
+public:
 	/**
 	 * Returns a user-friendly title of this condition.
 	 * Used by the Editor to display the condition in lists (e.g. "Health > 0").

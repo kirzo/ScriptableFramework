@@ -1,59 +1,8 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableBlueprintLibrary.h"
+#include "ScriptablePropertyUtilities.h"
 #include "StructUtils/PropertyBag.h"
-
-// --- Custom Thunks Helpers ---
-
-static bool ArePropertiesCompatible(const FProperty* InputProp, const FProperty* TargetProp)
-{
-	// Basic class check.
-	if (InputProp->GetClass() != TargetProp->GetClass())
-	{
-		// Special case: Byte vs Enum.
-		if ((InputProp->IsA<FByteProperty>() && TargetProp->IsA<FEnumProperty>()) ||
-			(InputProp->IsA<FEnumProperty>() && TargetProp->IsA<FByteProperty>()))
-		{
-			return true;
-		}
-		return false;
-	}
-
-	// Struct check.
-	if (const FStructProperty* InputStruct = CastField<FStructProperty>(InputProp))
-	{
-		const FStructProperty* TargetStruct = CastField<const FStructProperty>(TargetProp);
-		return InputStruct->Struct == TargetStruct->Struct;
-	}
-
-	// Object check (Allow Child -> Parent AND Parent -> Child for QoL).
-	if (const FObjectPropertyBase* InputObj = CastField<FObjectPropertyBase>(InputProp))
-	{
-		const FObjectPropertyBase* TargetObj = CastField<const FObjectPropertyBase>(TargetProp);
-
-		// Allow standard Child -> Parent (e.g., AActor -> UObject)
-		// AND Parent -> Child (e.g., UObject -> AActor) to avoid explicit Cast nodes in Blueprints.
-		// The actual safety cast will be performed dynamically at runtime.
-		return InputObj->PropertyClass->IsChildOf(TargetObj->PropertyClass) ||
-			TargetObj->PropertyClass->IsChildOf(InputObj->PropertyClass);
-	}
-
-	// Array check.
-	if (const FArrayProperty* InputArray = CastField<FArrayProperty>(InputProp))
-	{
-		const FArrayProperty* TargetArray = CastField<const FArrayProperty>(TargetProp);
-		return ArePropertiesCompatible(InputArray->Inner, TargetArray->Inner);
-	}
-
-	// Enum check.
-	if (const FEnumProperty* InputEnum = CastField<FEnumProperty>(InputProp))
-	{
-		const FEnumProperty* TargetEnum = CastField<const FEnumProperty>(TargetProp);
-		return InputEnum->GetEnum() == TargetEnum->GetEnum();
-	}
-
-	return true;
-}
 
 // Helper function to process context parameter assignment for any scriptable container.
 static void AssignContextParameterToContainer(FFrame& Stack, const UScriptStruct* ExpectedStructType, const FString& FunctionName)
@@ -128,7 +77,7 @@ static void AssignContextParameterToContainer(FFrame& Stack, const UScriptStruct
 		uint8* DestPtr = BagProp->ContainerPtrToValuePtr<uint8>(StructMemory);
 
 		// If ValueProp is valid, do the rigorous compatibility check
-		if (ValueProp && !ArePropertiesCompatible(ValueProp, BagProp))
+		if (ValueProp && !FScriptablePropertyUtilities::ArePropertiesCompatible(ValueProp, BagProp))
 		{
 #if WITH_EDITOR
 			FFrame::KismetExecutionMessage(*FString::Printf(TEXT("%s: Type mismatch for parameter '%s'."), *FunctionName, *ParameterName.ToString()), ELogVerbosity::Warning);
