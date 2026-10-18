@@ -6,15 +6,9 @@ void UScriptableCondition_NestedRequirement::OnRegister()
 {
 	Super::OnRegister();
 
-	// Inherit the parent scope's context by copying its bag into our local one. This is what makes
-	// the inner conditions resolve context bindings: Requirement.Register passes the wrapper's owner,
-	// and AddBindingSource needs a locally-valid Context to inject — relying on the UScriptableObject
-	// fallback is fragile when the wrapper's own ContextRef hasn't propagated. Mirrors
-	// UScriptableCondition_Asset.
-	if (const FInstancedPropertyBag* ParentContext = GetContext())
-	{
-		Requirement.Context = *ParentContext;
-	}
+	// Hand the parent scope's context to the inner conditions by pointer: Requirement.Register passes the
+	// wrapper's owner, not the wrapper, so AddBindingSource cannot fall back to our ContextRef on its own.
+	Requirement.SetInheritedContext(GetContext());
 
 	// Inherit the parent scope's Locals when this nested unit doesn't declare its own. Cannot copy
 	// because SetLocal-style writes have to propagate back to the parent's bag; point GetLocals at the

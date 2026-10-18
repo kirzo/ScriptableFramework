@@ -47,6 +47,9 @@ private:
 	/** Optional external Locals bag that overrides the local one. Set by wrappers (nested actions / requirements) that share the parent scope's Locals with their inner tasks. Plain ptr because it points at a UPROPERTY of an outer scope which outlives us during the wrapper's lifetime. */
 	FInstancedPropertyBag* InheritedLocalsBag = nullptr;
 
+	/** Optional external Context bag handed to children instead of the local one. Set by nested wrappers so inner units read the parent scope's context without copying it. */
+	const FInstancedPropertyBag* InheritedContextBag = nullptr;
+
 public:
 	bool HasContext() const { return Context.IsValid(); }
 
@@ -84,6 +87,9 @@ public:
 	/** Points GetLocals at an external bag instead of the local one. Used by nested wrappers to share the parent scope's Locals with inner tasks (write-through). Pass null to revert. Cleared on Unregister. */
 	void SetInheritedLocals(FInstancedPropertyBag* External) { InheritedLocalsBag = External; }
 	FInstancedPropertyBag* GetInheritedLocals() const { return InheritedLocalsBag; }
+
+	/** Hands an external Context bag to the children registered next, taking precedence over the local one. Cleared on Unregister. */
+	void SetInheritedContext(const FInstancedPropertyBag* External) { InheritedContextBag = External; }
 
 	bool HasContextProperty(const FName& Name) const
 	{

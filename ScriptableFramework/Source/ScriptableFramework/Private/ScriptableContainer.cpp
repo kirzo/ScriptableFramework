@@ -139,8 +139,13 @@ void FScriptableContainer::AddBindingSource(UScriptableObject* InSource)
 		const FInstancedPropertyBag* ContextToUse = nullptr;
 
 		// 1. Determine which Context to pass down.
+		// A wrapper-injected bag wins: it is the parent scope's context.
+		if (InheritedContextBag)
+		{
+			ContextToUse = InheritedContextBag;
+		}
 		// If our local context is valid and has properties, use it (it acts as the top-most scope).
-		if (Context.IsValid() && Context.GetNumPropertiesInBag() > 0)
+		else if (Context.IsValid() && Context.GetNumPropertiesInBag() > 0)
 		{
 			ContextToUse = &Context;
 		}
@@ -178,6 +183,7 @@ void FScriptableContainer::Register(UObject* InOwner)
 void FScriptableContainer::Unregister()
 {
 	InheritedLocalsBag = nullptr;
+	InheritedContextBag = nullptr;
 	BindingSourceMap.Empty();
 	Owner = nullptr;
 }

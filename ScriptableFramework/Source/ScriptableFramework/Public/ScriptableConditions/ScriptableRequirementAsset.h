@@ -52,7 +52,15 @@ protected:
 	virtual bool Evaluate_Implementation() const override;
 
 private:
-	/** The actual instance created from the asset template. */
+	/** The actual instance created from the asset template. Kept across registrations, rebuilt when the asset changes. */
 	UPROPERTY(Transient)
 	TObjectPtr<UScriptableCondition> Condition;
+
+	/** Asset the cached Condition was built from. Reset when that asset is edited, forcing a rebuild on the next Register. */
+	TWeakObjectPtr<UScriptableRequirementAsset> ConditionAsset;
+
+#if WITH_EDITOR
+	FDelegateHandle OnObjectPropertyChangedHandle;
+	void OnObjectPropertyChanged(UObject* Object, FPropertyChangedEvent& Event);
+#endif
 };

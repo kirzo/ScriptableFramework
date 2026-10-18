@@ -8,48 +8,46 @@ void UScriptableCondition_Asset::OnRegister()
 {
 	Super::OnRegister();
 
-	if (Asset)
+	// Requirements register on every evaluation, so the duplicated group is cached and only rebuilt when the asset changes.
+	if (!ConditionAsset.IsValid() || ConditionAsset.Get() != Asset)
 	{
-		// 1. Create a transient Group to act as the runtime container.
-		// We use a Group because it already encapsulates the logic for FScriptableRequirement (Evaluation + Bindings).
-		UScriptableCondition_NestedRequirement* Group = NewObject<UScriptableCondition_NestedRequirement>(this, NAME_None, RF_Transient);
+		Condition = nullptr;
+		ConditionAsset = Asset.Get();
 
-		if (Group)
+		if (Asset)
 		{
-			// 2. Copy struct properties (Mode, Negate, Context)
-			// This performs a copy of the PropertyBag, preserving default values from the Asset.
+			// A Group already encapsulates FScriptableRequirement evaluation + bindings, and inherits our context on Register.
+			UScriptableCondition_NestedRequirement* Group = NewObject<UScriptableCondition_NestedRequirement>(this, NAME_None, RF_Transient);
 			Group->Requirement.Mode = Asset->Requirement.Mode;
 			Group->Requirement.bNegate = Asset->Requirement.bNegate;
 
-			if (const FInstancedPropertyBag* ParentContext = GetContext())
-			{
-				Group->Requirement.Context = *ParentContext;
-			}
-
-			// 3. Deep Copy Conditions
-			// We MUST duplicate the conditions. If we just copy the pointers, registering them 
-			// would modify the objects inside the Asset (changing their Outer/Bindings), which is bad.
-			const int32 NumConds = Asset->Requirement.Conditions.Num();
-			Group->Requirement.Conditions.Reset(NumConds);
-
+			// Duplicate so registering never touches the conditions inside the asset (Outer/runtime data).
+			Group->Requirement.Conditions.Reset(Asset->Requirement.Conditions.Num());
 			for (const UScriptableCondition* SourceCond : Asset->Requirement.Conditions)
 			{
 				if (SourceCond)
 				{
-					// Duplicate using 'Group' as the new outer.
-					UScriptableCondition* NewCond = DuplicateObject<UScriptableCondition>(SourceCond, Group);
-					Group->Requirement.Conditions.Add(NewCond);
+					Group->Requirement.Conditions.Add(DuplicateObject<UScriptableCondition>(SourceCond, Group));
 				}
 			}
 
-			// 4. Assign to our internal pointer
 			Condition = Group;
 
-			// 5. Inject Runtime Data & Register
-			// This passes the Stack down to the Group, which passes it to its children + the new Asset Context.
-			PropagateRuntimeData(Condition);
-			Condition->Register(GetOwner());
+#if WITH_EDITOR
+			// Editing the asset during PIE must reach the cached copy.
+			if (!OnObjectPropertyChangedHandle.IsValid())
+			{
+				OnObjectPropertyChangedHandle = FCoreUObjectDelegates::OnObjectPropertyChanged.AddUObject(this, &UScriptableCondition_Asset::OnObjectPropertyChanged);
+			}
+#endif
 		}
+	}
+
+	if (Condition)
+	{
+		// Hand our context, locals and bindings map to the Group, which hands them to its conditions.
+		PropagateRuntimeData(Condition);
+		Condition->Register(GetOwner());
 	}
 }
 
@@ -58,7 +56,6 @@ void UScriptableCondition_Asset::OnUnregister()
 	if (Condition)
 	{
 		Condition->Unregister();
-		Condition = nullptr; // Release the transient group
 	}
 
 	Super::OnUnregister();
@@ -77,5 +74,15 @@ bool UScriptableCondition_Asset::Evaluate_Implementation() const
 FText UScriptableCondition_Asset::GetDisplayTitle() const
 {
 	return Asset ? FText::FromString(Asset->GetName()) : INVTEXT("None");
+}
+
+void UScriptableCondition_Asset::OnObjectPropertyChanged(UObject* Object, FPropertyChangedEvent& Event)
+{
+	// Covers edits on the asset itself and on its condition subobjects (undo/redo goes through PostEditChange too).
+	const UScriptableRequirementAsset* Source = ConditionAsset.Get();
+	if (Source && Object && (Object == Source || Object->IsIn(Source)))
+	{
+		ConditionAsset.Reset();
+	}
 }
 #endif
