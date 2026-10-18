@@ -307,7 +307,7 @@ UWorld* UScriptableObject::GetWorld_Uncached() const
 
 void UScriptableObject::OnWorldBeginTearDown(UWorld* InWorld)
 {
-	if (InWorld == GetWorld())
+	if (IsRegistered() && InWorld == WorldPrivate)
 	{
 		Unregister();
 	}
@@ -343,7 +343,6 @@ void UScriptableObject::Unregister()
 		return;
 	}
 
-	FWorldDelegates::OnWorldBeginTearDown.Remove(OnWorldBeginTearDownHandle);
 	RegisterTickFunctions(false);
 
 	// If registered, should have a world
@@ -410,7 +409,11 @@ void UScriptableObject::RegisterObjectWithWorld(UWorld* InWorld)
 
 	WorldPrivate = InWorld;
 
-	OnWorldBeginTearDownHandle = FWorldDelegates::OnWorldBeginTearDown.AddUObject(this, &UScriptableObject::OnWorldBeginTearDown);
+	// Once per object: requirements register on every evaluation, and Remove scans the whole global list.
+	if (!OnWorldBeginTearDownHandle.IsValid())
+	{
+		OnWorldBeginTearDownHandle = FWorldDelegates::OnWorldBeginTearDown.AddUObject(this, &UScriptableObject::OnWorldBeginTearDown);
+	}
 
 	bRegistered = true;
 }

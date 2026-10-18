@@ -5,6 +5,7 @@
 #include "ScriptableContext.h"
 #include "Algo/AllOf.h"
 #include "Algo/AnyOf.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 void FScriptableRequirement::Register(UObject* InOwner)
 {
@@ -115,6 +116,8 @@ bool FScriptableRequirement::Evaluate() const
 
 bool FScriptableRequirement::EvaluateRequirement(UObject* Owner, const FScriptableRequirement& Requirement)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FScriptableRequirement::EvaluateRequirement);
+
 	if (!Owner) return false;
 
 	FScriptableRequirement& MutableReq = const_cast<FScriptableRequirement&>(Requirement);
