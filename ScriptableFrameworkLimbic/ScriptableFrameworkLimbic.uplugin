@@ -1,0 +1,39 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "Scriptable Framework - Limbic Integration",
+	"Description": "Adds Limbic tasks (set and stop puppeteers in the slots of a character's Limbic nodes) to the Scriptable Framework. Requires the Limbic plugin.",
+	"Category": "Scripting",
+	"CreatedBy": "kirzo",
+	"CreatedByURL": "https://kirzo.dev",
+	"DocsURL": "https://github.com/kirzo/ScriptableFramework",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"EnabledByDefault": false,
+	"CanContainContent": false,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "ScriptableFrameworkLimbic",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ScriptableFramework",
+			"Enabled": true
+		},
+		{
+			"Name": "Limbic",
+			"Enabled": true
+		},
+		{
+			"Name": "KzLib",
+			"Enabled": true
+		}
+	]
+}
