@@ -132,6 +132,9 @@ public:
 	/** Finds a registered object by its persistent ID (used by Property Bindings). */
 	UScriptableObject* FindBindingSource(const FGuid& InID) const;
 
+	/** Adds outer-scope sources (e.g. a graph's other nodes) to the children's lookup map. Call after Register; Unregister drops them. */
+	void AppendBindingSources(const TMap<FGuid, TObjectPtr<UScriptableObject>>& Sources) { BindingSourceMap.Append(Sources); }
+
 protected:
 	/** Populates the map and initializes the child with this context. */
 	void AddBindingSource(UScriptableObject* InSource);

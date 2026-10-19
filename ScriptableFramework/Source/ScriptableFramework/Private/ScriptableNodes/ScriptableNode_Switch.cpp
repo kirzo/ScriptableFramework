@@ -28,6 +28,24 @@ TArray<FName> UScriptableNode_Switch::GetDeclaredOutputPins() const
 	return Outputs;
 }
 
+void UScriptableNode_Switch::OnRegister()
+{
+	Super::OnRegister();
+	for (FScriptableRequirement& Case : Cases)
+	{
+		RegisterRequirement(Case);
+	}
+}
+
+void UScriptableNode_Switch::OnUnregister()
+{
+	for (FScriptableRequirement& Case : Cases)
+	{
+		Case.Unregister();
+	}
+	Super::OnUnregister();
+}
+
 void UScriptableNode_Switch::ProcessInput(FName InputName)
 {
 	if (InputName != InInputName) return;

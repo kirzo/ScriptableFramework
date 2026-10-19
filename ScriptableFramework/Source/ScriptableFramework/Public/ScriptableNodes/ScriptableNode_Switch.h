@@ -36,6 +36,11 @@ public:
 	virtual TArray<FName> GetDeclaredOutputPins() const override;
 	//~ End of UScriptableNode interface
 
+	//~ UScriptableObject interface
+	virtual void OnRegister() override;
+	virtual void OnUnregister() override;
+	//~ End of UScriptableObject interface
+
 protected:
 	//~ UScriptableNode interface
 	virtual void ProcessInput(FName InputName) override;

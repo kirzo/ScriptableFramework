@@ -16,6 +16,18 @@ TArray<FName> UScriptableNode_Branch::GetDeclaredOutputPins() const
 	return { TrueOutputName, FalseOutputName };
 }
 
+void UScriptableNode_Branch::OnRegister()
+{
+	Super::OnRegister();
+	RegisterRequirement(Requirement);
+}
+
+void UScriptableNode_Branch::OnUnregister()
+{
+	Requirement.Unregister();
+	Super::OnUnregister();
+}
+
 void UScriptableNode_Branch::ProcessInput(FName InputName)
 {
 	if (InputName != InInputName) return;

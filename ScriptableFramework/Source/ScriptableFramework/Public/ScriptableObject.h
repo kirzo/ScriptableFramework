@@ -160,6 +160,9 @@ public:
 	const FInstancedPropertyBag* GetLocals() const { return LocalsRef; }
 	FInstancedPropertyBag* GetMutableLocals() { return LocalsRef; }
 
+	/** Binding ID -> source map injected by the owning scope. Set by InitRuntimeData, cleared on Unregister. */
+	const TMap<FGuid, TObjectPtr<UScriptableObject>>* GetBindingsMap() const { return BindingsMapRef; }
+
 	/** Finds a registered task by its persistent ID. */
 	UScriptableObject* FindBindingSource(const FGuid& InID);
 

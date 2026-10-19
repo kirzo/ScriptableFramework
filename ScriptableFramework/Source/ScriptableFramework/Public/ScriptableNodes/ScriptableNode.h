@@ -7,6 +7,7 @@
 #include "ScriptableNode.generated.h"
 
 class UScriptableNode;
+struct FScriptableRequirement;
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(FScriptableNodePinFiredNative, UScriptableNode* /*Node*/, FName /*OutputName*/);
 DECLARE_MULTICAST_DELEGATE_OneParam(FScriptableNodeInactiveNative, UScriptableNode* /*Node*/);
@@ -127,6 +128,9 @@ protected:
 
 	/** Helper to deactivate every currently active output without firing. Used in cancellation paths. */
 	void DeactivateAllOutputs();
+
+	/** Registers a requirement hosted by this node against the graph scope: Context, Locals and the other nodes' Outputs, as the editor offers them. Unregister it in OnUnregister. */
+	void RegisterRequirement(FScriptableRequirement& Requirement);
 
 private:
 	/** Checks whether the node just became inactive and broadcasts OnNodeInactiveNative if so. */

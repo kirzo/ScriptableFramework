@@ -3,6 +3,7 @@
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableGraphInstance.h"
+#include "ScriptableConditions/ScriptableRequirement.h"
 #include "HAL/IConsoleManager.h"
 
 const FName UScriptableNode::StopInputName = TEXT("Stop");
@@ -137,6 +138,23 @@ void UScriptableNode::DeactivateAllOutputs()
 
 	ActiveOutputPins.Reset();
 	NotifyIfInactive();
+}
+
+void UScriptableNode::RegisterRequirement(FScriptableRequirement& Requirement)
+{
+	// The requirement registers against the graph owner, not this node, so the graph scope is handed over explicitly.
+	Requirement.SetInheritedContext(GetContext());
+	if (Requirement.LocalsDefinitions.Num() == 0)
+	{
+		Requirement.SetInheritedLocals(GetMutableLocals());
+	}
+
+	Requirement.Register(GetOwner());
+
+	if (const TMap<FGuid, TObjectPtr<UScriptableObject>>* GraphSources = GetBindingsMap())
+	{
+		Requirement.AppendBindingSources(*GraphSources);
+	}
 }
 
 void UScriptableNode::NotifyIfInactive()
