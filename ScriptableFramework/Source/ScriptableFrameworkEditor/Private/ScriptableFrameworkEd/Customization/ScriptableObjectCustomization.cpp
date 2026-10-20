@@ -1630,66 +1630,76 @@ void FScriptableObjectCustomization::OnPasteNode()
 {
 	TArray<UObject*> OuterObjects;
 	PropertyHandle->GetOuterObjects(OuterObjects);
-	if (OuterObjects.IsEmpty() || !OuterObjects[0]) return;
 
-	UObject* NewInstance = FKzClipboardUtils::PasteObjectFromClipboard<UObject>(OuterObjects[0]);
+	TArray<void*> RawData;
+	PropertyHandle->AccessRawData(RawData);
 
-	if (NewInstance)
+	// One copy per edited object, owned by it: a single shared instance would belong to the first object only.
+	TArray<UObject*> NewInstances;
+	for (UObject* Outer : OuterObjects)
 	{
-		// Type validation
-		UClass* BaseClass = GetBaseClass();
-		if (BaseClass && !NewInstance->IsA(BaseClass))
+		NewInstances.Add(Outer ? FKzClipboardUtils::PasteObjectFromClipboard<UObject>(Outer) : nullptr);
+	}
+
+	auto DiscardNewInstances = [&NewInstances]()
+	{
+		for (UObject* NewInstance : NewInstances)
 		{
-			FNotificationInfo Info(FText::Format(LOCTEXT("PasteTypeMismatch", "Cannot paste '{0}' here. Expected '{1}'."), NewInstance->GetClass()->GetDisplayNameText(), BaseClass->GetDisplayNameText()));
-			Info.ExpireDuration = 3.0f;
-			Info.Image = FAppStyle::GetBrush("Icons.Error");
-			FSlateNotificationManager::Get().AddNotification(Info);
-
-			NewInstance->ClearFlags(RF_Transactional);
-			NewInstance->MarkAsGarbage();
-			return;
+			if (NewInstance)
+			{
+				NewInstance->ClearFlags(RF_Transactional);
+				NewInstance->MarkAsGarbage();
+			}
 		}
+	};
 
-		// The bindings were pasted with the OLD object's StructID. 
-		// We must update the TargetPath of all bindings to match the NEW object's ID.
-		if (UScriptableObject* ScriptableObj = Cast<UScriptableObject>(NewInstance))
+	if (NewInstances.IsEmpty() || NewInstances.Contains(nullptr) || NewInstances.Num() != RawData.Num())
+	{
+		DiscardNewInstances();
+		return;
+	}
+
+	// Type validation
+	UClass* BaseClass = GetBaseClass();
+	if (BaseClass && !NewInstances[0]->IsA(BaseClass))
+	{
+		FNotificationInfo Info(FText::Format(LOCTEXT("PasteTypeMismatch", "Cannot paste '{0}' here. Expected '{1}'."), NewInstances[0]->GetClass()->GetDisplayNameText(), BaseClass->GetDisplayNameText()));
+		Info.ExpireDuration = 3.0f;
+		Info.Image = FAppStyle::GetBrush("Icons.Error");
+		FSlateNotificationManager::Get().AddNotification(Info);
+
+		DiscardNewInstances();
+		return;
+	}
+
+	// Notify change (vital for Undo/Redo)
+	FScopedTransaction Transaction(LOCTEXT("PasteNode", "Paste Scriptable Object"));
+	PropertyHandle->NotifyPreChange();
+
+	for (int32 Index = 0; Index < NewInstances.Num(); ++Index)
+	{
+		// The bindings were pasted with the OLD object's StructID: retarget them to this instance's ID.
+		if (UScriptableObject* ScriptableObj = Cast<UScriptableObject>(NewInstances[Index]))
 		{
 			const FGuid NewGuid = ScriptableObj->GetBindingID();
-			FScriptablePropertyBindings& Bindings = ScriptableObj->GetPropertyBindings();
-
-			// Iterate over all bindings and patch the TargetPath to point to this new instance
-			for (FScriptablePropertyBinding& Binding : Bindings.Bindings)
+			for (FScriptablePropertyBinding& Binding : ScriptableObj->GetPropertyBindings().Bindings)
 			{
 				Binding.TargetPath.SetStructID(NewGuid);
 			}
 		}
 
-		// Access raw data (memory pointers)
-		TArray<void*> RawData;
-		PropertyHandle->AccessRawData(RawData);
-
-		// Notify change (vital for Undo/Redo)
-		FScopedTransaction Transaction(LOCTEXT("PasteNode", "Paste Scriptable Object"));
-		PropertyHandle->NotifyPreChange();
-
-		// Direct Injection
-		// Assume RawData has the same num as selected objects (usually 1)
-		for (void* DataPtr : RawData)
+		// FObjectProperty stores a UObject*
+		if (RawData[Index])
 		{
-			if (DataPtr)
-			{
-				// FObjectProperty stores a UObject*, so cast void* to UObject**
-				UObject** ObjectPtr = static_cast<UObject**>(DataPtr);
-				*ObjectPtr = NewInstance;
-			}
+			*static_cast<UObject**>(RawData[Index]) = NewInstances[Index];
 		}
+	}
 
-		PropertyHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
+	PropertyHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
 
-		if (PropertyUtilities)
-		{
-			PropertyUtilities->ForceRefresh();
-		}
+	if (PropertyUtilities)
+	{
+		PropertyUtilities->ForceRefresh();
 	}
 }
 
