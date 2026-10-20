@@ -17,6 +17,8 @@ public:
 
 	//~ UEdGraphNode interface
 	virtual FLinearColor GetNodeTitleColor() const override;
+	virtual FSlateIcon GetIconAndTint(FLinearColor& OutColor) const override;
+	virtual bool ShowPaletteIconOnNode() const override { return true; }
 	//~ End of UEdGraphNode interface
 
 	//~ UScriptableEdGraphNode interface

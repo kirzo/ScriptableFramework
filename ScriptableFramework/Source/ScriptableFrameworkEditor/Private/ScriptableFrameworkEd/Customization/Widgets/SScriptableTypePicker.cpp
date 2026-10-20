@@ -358,14 +358,19 @@ void SScriptableTypeSelector::AddNode(const UStruct* Struct, const FName& MetaKe
 	Item->Struct = Struct;
 	Item->IconColor = FLinearColor::Gray;
 
-	// Native nodes show the same icon their ed-node uses on the graph canvas.
+	// Native nodes show the same icon their ed-node uses on the graph canvas; tasks and conditions, their own
 	if (const UClass* NodeClass = Cast<const UClass>(Struct))
 	{
 		FLinearColor IconTint;
-		const FSlateIcon EdIcon = GetNativeNodeGraphIcon(NodeClass, IconTint);
-		if (EdIcon.IsSet())
+		FSlateIcon Icon = GetNativeNodeGraphIcon(NodeClass, IconTint);
+		if (!Icon.IsSet())
 		{
-			Item->Icon = EdIcon;
+			Icon = FScriptableFrameworkEditorStyle::GetScriptableObjectIcon(NodeClass, IconTint);
+		}
+
+		if (Icon.IsSet())
+		{
+			Item->Icon = Icon;
 			Item->IconColor = IconTint;
 		}
 	}
@@ -410,29 +415,10 @@ void SScriptableTypeSelector::AddNode(const FAssetData& AssetData, const FText& 
 	TSharedPtr<FScriptableTypeItem> Item = ParentItem->Children.Add_GetRef(MakeShared<FScriptableTypeItem>());
 	Item->AssetData = AssetData;
 
-	// Resolve Icon
-	FName IconName = NAME_None;
-
-	if (AssetData.IsInstanceOf<UScriptableActionAsset>())
-	{
-		IconName = "ClassIcon.ScriptableActionAsset";
-	}
-	else if (AssetData.IsInstanceOf<UScriptableRequirementAsset>())
-	{
-		IconName = "ClassIcon.ScriptableRequirementAsset";
-	}
-
-	if (!IconName.IsNone())
-	{
-		Item->Icon = FSlateIcon(FScriptableFrameworkEditorStyle::Get().GetStyleSetName(), IconName);
-		Item->IconColor = FLinearColor::White;
-	}
-	else
-	{
-		// Fallback generic icon
-		Item->Icon = FSlateIconFinder::FindIconForClass(UObject::StaticClass());
-		Item->IconColor = FLinearColor::White;
-	}
+	// The asset class's own icon (Action, Requirement, Graph), falling back to the generic one
+	const UClass* AssetClass = AssetData.GetClass();
+	Item->Icon = FSlateIconFinder::FindIconForClass(AssetClass ? AssetClass : UObject::StaticClass());
+	Item->IconColor = FLinearColor::White;
 }
 
 bool SScriptableTypeSelector::MatchesCategoryPath(const TArray<FString>& CategoryPath)

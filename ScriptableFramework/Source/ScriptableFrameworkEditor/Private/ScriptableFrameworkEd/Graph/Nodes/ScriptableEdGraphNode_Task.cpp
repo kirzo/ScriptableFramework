@@ -49,6 +49,14 @@ FText UScriptableEdGraphNode_Task::GetTooltipText() const
 	return Super::GetTooltipText();
 }
 
+FSlateIcon UScriptableEdGraphNode_Task::GetIconAndTint(FLinearColor& OutColor) const
+{
+	// The wrapped task's own icon, or the plain task block while the node is empty
+	const UScriptableNode_Task* TaskNode = Cast<UScriptableNode_Task>(GetRuntimeNode());
+	const UClass* TaskClass = TaskNode && TaskNode->Task ? TaskNode->Task->GetClass() : UScriptableTask::StaticClass();
+	return FScriptableFrameworkEditorStyle::GetScriptableObjectIcon(TaskClass, OutColor);
+}
+
 bool UScriptableEdGraphNode_Task::ShouldShowPinLabel(FName PinName) const
 {
 	if (PinName == UScriptableNode_Task::StartInputName) return false;

@@ -15,6 +15,12 @@ FLinearColor UScriptableEdGraphNode_SubGraph::GetNodeTitleColor() const
 	return FScriptableFrameworkEditorStyle::ScriptableGraphColor;
 }
 
+FSlateIcon UScriptableEdGraphNode_SubGraph::GetIconAndTint(FLinearColor& OutColor) const
+{
+	OutColor = FLinearColor::White;
+	return FSlateIcon(FScriptableFrameworkEditorStyle::Get().GetStyleSetName(), "ClassIcon.ScriptableGraph");
+}
+
 bool UScriptableEdGraphNode_SubGraph::ShouldShowPinLabel(FName PinName) const
 {
 	/** "In" is the implicit start pin and reads as noise alongside named event pins; Cancel and events keep their labels. */

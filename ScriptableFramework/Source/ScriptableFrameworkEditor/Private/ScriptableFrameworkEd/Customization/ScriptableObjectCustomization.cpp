@@ -1235,6 +1235,32 @@ TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderNameContent(
 				.ToolTipText(LOCTEXT("Toggle", "Enable/Disable"))
 		];
 
+	// The task or condition's icon, followed live so it changes with the picked class
+	NameBox->AddSlot()
+		.AutoWidth().Padding(0, 0, 4, 0).VAlign(VAlign_Center)
+		[
+			SNew(SImage)
+				.Image_Lambda([this]()
+				{
+					const UScriptableObject* Obj = ScriptableObject.Get();
+					FLinearColor Tint;
+					return FScriptableFrameworkEditorStyle::GetScriptableObjectIcon(Obj ? Obj->GetClass() : nullptr, Tint).GetOptionalIcon();
+				})
+				.ColorAndOpacity_Lambda([this]()
+				{
+					const UScriptableObject* Obj = ScriptableObject.Get();
+					FLinearColor Tint;
+					FScriptableFrameworkEditorStyle::GetScriptableObjectIcon(Obj ? Obj->GetClass() : nullptr, Tint);
+					return FSlateColor(Tint);
+				})
+				.Visibility_Lambda([this]()
+				{
+					const UScriptableObject* Obj = ScriptableObject.Get();
+					FLinearColor Tint;
+					return FScriptableFrameworkEditorStyle::GetScriptableObjectIcon(Obj ? Obj->GetClass() : nullptr, Tint).IsSet() ? EVisibility::Visible : EVisibility::Collapsed;
+				})
+		];
+
 	// Title
 	NameBox->AddSlot()
 		.FillWidth(1.0f).VAlign(VAlign_Center)
