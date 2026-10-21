@@ -5,18 +5,19 @@
 #include "ScriptableConditions/ScriptableCondition.h"
 #include "Styling/SlateIconFinder.h"
 
-FLinearColor FScriptableFrameworkEditorStyle::ScriptableTaskColor = FLinearColor(0.0f, 0.66f, 1.0f);
-FLinearColor FScriptableFrameworkEditorStyle::ScriptableConditionColor = FLinearColor(0.57f, 0.0f, 0.09f);
-FLinearColor FScriptableFrameworkEditorStyle::ScriptableGraphColor = FLinearColor(0.2f, 0.75f, 0.7f);
+FLinearColor FScriptableFrameworkEditorStyle::EventColor = FLinearColor(FColor(0xF3, 0x9C, 0x32));
+FLinearColor FScriptableFrameworkEditorStyle::ActionColor = FLinearColor(FColor(0x4C, 0x9B, 0xE8));
+FLinearColor FScriptableFrameworkEditorStyle::GraphColor = FLinearColor(FColor(0x4C, 0x9B, 0xE8));
+FLinearColor FScriptableFrameworkEditorStyle::TaskColor = FLinearColor(FColor(0x3B, 0xC4, 0x8D));
+FLinearColor FScriptableFrameworkEditorStyle::RequirementColor = FLinearColor(FColor(0xE0, 0x4F, 0x72));
+FLinearColor FScriptableFrameworkEditorStyle::ConditionColor = FLinearColor(FColor(0x9B, 0x6B, 0xDF));
+FLinearColor FScriptableFrameworkEditorStyle::FlowColor = FLinearColor(FColor(0x4A, 0x5D, 0x70));
+FLinearColor FScriptableFrameworkEditorStyle::ExitColor = FLinearColor(FColor(0x9B, 0x6B, 0xDF));
 
 FLinearColor FScriptableFrameworkEditorStyle::InactiveColor = FLinearColor(0.2f, 0.2f, 0.2f, 0.5f);
 FLinearColor FScriptableFrameworkEditorStyle::NegateColor = FLinearColor(0.8f, 0.1f, 0.1f);
 
 FLinearColor FScriptableFrameworkEditorStyle::ContextColor = FLinearColor(0.32f, 0.65f, 0.52f);
-
-FLinearColor FScriptableFrameworkEditorStyle::ScriptableEntryNodeColor = FLinearColor(0.35f, 0.95f, 0.05f);
-FLinearColor FScriptableFrameworkEditorStyle::ScriptableExitNodeColor = FLinearColor(0.8f, 0.08f, 0.08f);
-FLinearColor FScriptableFrameworkEditorStyle::ScriptableSystemNodeColor = FLinearColor(0.12f, 0.12f, 0.14f);
 
 FScriptableFrameworkEditorStyle::FScriptableFrameworkEditorStyle()
 	: TKzEditorStyle_Base(FName("ScriptableFrameworkEditorStyle"))
@@ -97,10 +98,6 @@ FScriptableFrameworkEditorStyle::FScriptableFrameworkEditorStyle()
 
 FSlateIcon FScriptableFrameworkEditorStyle::GetScriptableObjectIcon(const UClass* Class, FLinearColor& OutTint)
 {
-	// The colours of the task and condition blocks in the Action and Requirement thumbnails
-	static const FLinearColor TaskTint(FColor(0x3B, 0xC4, 0x8D));
-	static const FLinearColor ConditionTint(FColor(0x9B, 0x6B, 0xDF));
-
 	OutTint = FLinearColor::White;
 	if (!Class)
 	{
@@ -109,11 +106,11 @@ FSlateIcon FScriptableFrameworkEditorStyle::GetScriptableObjectIcon(const UClass
 
 	if (Class->IsChildOf(UScriptableTask::StaticClass()))
 	{
-		OutTint = TaskTint;
+		OutTint = TaskColor;
 	}
 	else if (Class->IsChildOf(UScriptableCondition::StaticClass()))
 	{
-		OutTint = ConditionTint;
+		OutTint = ConditionColor;
 	}
 	else
 	{

@@ -50,7 +50,7 @@ void UScriptableEdGraphNode_ReceiveEvent::OnRenameNode(const FString& NewName)
 
 FLinearColor UScriptableEdGraphNode_ReceiveEvent::GetNodeTitleColor() const
 {
-	return FScriptableFrameworkEditorStyle::ScriptableEntryNodeColor;
+	return FScriptableFrameworkEditorStyle::EventColor;
 }
 
 FSlateIcon UScriptableEdGraphNode_ReceiveEvent::GetIconAndTint(FLinearColor& OutColor) const

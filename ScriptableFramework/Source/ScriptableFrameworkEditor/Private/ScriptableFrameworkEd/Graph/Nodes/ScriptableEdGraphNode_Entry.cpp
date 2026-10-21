@@ -16,7 +16,7 @@ FText UScriptableEdGraphNode_Entry::GetNodeTitle(ENodeTitleType::Type TitleType)
 
 FLinearColor UScriptableEdGraphNode_Entry::GetNodeTitleColor() const
 {
-	return FScriptableFrameworkEditorStyle::ScriptableEntryNodeColor;
+	return FScriptableFrameworkEditorStyle::GraphColor;
 }
 
 FSlateIcon UScriptableEdGraphNode_Entry::GetIconAndTint(FLinearColor& OutColor) const

@@ -25,7 +25,7 @@ FText UScriptableEdGraphNode_Finish::GetNodeTitle(ENodeTitleType::Type TitleType
 FLinearColor UScriptableEdGraphNode_Finish::GetNodeTitleColor() const
 {
 	// Same red as Exit — both belong to the "graph terminator" family.
-	return FScriptableFrameworkEditorStyle::ScriptableExitNodeColor;
+	return FScriptableFrameworkEditorStyle::ExitColor;
 }
 
 FSlateIcon UScriptableEdGraphNode_Finish::GetIconAndTint(FLinearColor& OutColor) const

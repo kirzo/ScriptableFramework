@@ -11,8 +11,7 @@ UScriptableEdGraphNode_SubGraph::UScriptableEdGraphNode_SubGraph()
 
 FLinearColor UScriptableEdGraphNode_SubGraph::GetNodeTitleColor() const
 {
-	// Same teal as the UScriptableGraph asset entry — signals the node embeds a graph.
-	return FScriptableFrameworkEditorStyle::ScriptableGraphColor;
+	return FScriptableFrameworkEditorStyle::GraphColor;
 }
 
 FSlateIcon UScriptableEdGraphNode_SubGraph::GetIconAndTint(FLinearColor& OutColor) const

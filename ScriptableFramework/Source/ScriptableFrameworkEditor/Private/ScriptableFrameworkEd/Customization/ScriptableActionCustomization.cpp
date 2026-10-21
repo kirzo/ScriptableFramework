@@ -25,7 +25,7 @@ FName FScriptableActionCustomization::GetModePropertyName() const
 
 FSlateColor FScriptableActionCustomization::GetIconColor() const
 {
-	return FScriptableFrameworkEditorStyle::ScriptableTaskColor;
+	return FScriptableFrameworkEditorStyle::TaskColor;
 }
 
 FText FScriptableActionCustomization::GetAddButtonTooltip() const

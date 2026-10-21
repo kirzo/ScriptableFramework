@@ -14,7 +14,7 @@ UScriptableEdGraphNode_Exit::UScriptableEdGraphNode_Exit()
 
 FLinearColor UScriptableEdGraphNode_Exit::GetNodeTitleColor() const
 {
-	return FScriptableFrameworkEditorStyle::ScriptableExitNodeColor;
+	return FScriptableFrameworkEditorStyle::ExitColor;
 }
 
 FSlateIcon UScriptableEdGraphNode_Exit::GetIconAndTint(FLinearColor& OutColor) const

@@ -15,7 +15,7 @@ FText UScriptableEdGraphNode_Native::GetNodeTitle(ENodeTitleType::Type TitleType
 
 FLinearColor UScriptableEdGraphNode_Native::GetNodeTitleColor() const
 {
-	return FScriptableFrameworkEditorStyle::ScriptableSystemNodeColor;
+	return FScriptableFrameworkEditorStyle::FlowColor;
 }
 
 bool UScriptableEdGraphNode_Native::ShouldShowPinLabel(FName PinName) const

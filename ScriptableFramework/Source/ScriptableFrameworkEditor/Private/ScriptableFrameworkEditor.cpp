@@ -79,13 +79,13 @@ void FScriptableFrameworkEditorModule::OnStartupModule()
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
 	ScriptableAssetCategoryBit = AssetTools.RegisterAdvancedAssetCategory("ScriptableFramework", INVTEXT("Scriptable Framework"));
 
-	RegisterAssetTypeAction<UScriptableActionAsset>(ScriptableAssetCategoryBit, INVTEXT("Scriptable Action"), FScriptableFrameworkEditorStyle::ScriptableTaskColor.ToFColor(true));
-	RegisterAssetTypeAction<UScriptableRequirementAsset>(ScriptableAssetCategoryBit, INVTEXT("Scriptable Requirement"), FScriptableFrameworkEditorStyle::ScriptableConditionColor.ToFColor(true));
+	RegisterAssetTypeAction<UScriptableActionAsset>(ScriptableAssetCategoryBit, INVTEXT("Scriptable Action"), FScriptableFrameworkEditorStyle::ActionColor.ToFColor(true));
+	RegisterAssetTypeAction<UScriptableRequirementAsset>(ScriptableAssetCategoryBit, INVTEXT("Scriptable Requirement"), FScriptableFrameworkEditorStyle::RequirementColor.ToFColor(true));
 
 	// Registered by hand (not via the template) so it carries a custom PerformAssetDiff.
 	GraphAssetTypeActions = MakeShared<FScriptableGraphAssetTypeActions>(
 		ScriptableAssetCategoryBit, INVTEXT("Scriptable Graph"),
-		FScriptableFrameworkEditorStyle::ScriptableGraphColor.ToFColor(true),
+		FScriptableFrameworkEditorStyle::GraphColor.ToFColor(true),
 		UScriptableGraph::StaticClass(), TArray<FText>());
 	FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get().RegisterAssetTypeActions(GraphAssetTypeActions.ToSharedRef());
 

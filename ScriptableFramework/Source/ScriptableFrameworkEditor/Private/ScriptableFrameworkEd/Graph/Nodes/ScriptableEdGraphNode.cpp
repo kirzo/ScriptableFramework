@@ -40,12 +40,12 @@ FLinearColor UScriptableEdGraphNode::GetNodeTitleColor() const
 		const FString Category = RuntimeNode->GetClass()->GetMetaData(ScriptableFrameworkEditor::MD_NodeCategory);
 		if (!Category.IsEmpty())
 		{
-			if (Category.StartsWith(TEXT("Condition"), ESearchCase::IgnoreCase)) return FScriptableFrameworkEditorStyle::ScriptableConditionColor;
-			if (Category.StartsWith(TEXT("System"), ESearchCase::IgnoreCase)) return FScriptableFrameworkEditorStyle::ScriptableSystemNodeColor;
+			if (Category.StartsWith(TEXT("Condition"), ESearchCase::IgnoreCase)) return FScriptableFrameworkEditorStyle::RequirementColor;
+			if (Category.StartsWith(TEXT("System"), ESearchCase::IgnoreCase)) return FScriptableFrameworkEditorStyle::FlowColor;
 		}
 	}
 
-	return FScriptableFrameworkEditorStyle::ScriptableTaskColor;
+	return FScriptableFrameworkEditorStyle::TaskColor;
 }
 
 void UScriptableEdGraphNode::DestroyNode()

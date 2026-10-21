@@ -32,7 +32,7 @@ FLinearColor UScriptableEdGraphNode_Task::GetNodeTitleColor() const
 		}
 	}
 
-	return FScriptableFrameworkEditorStyle::ScriptableTaskColor;
+	return FScriptableFrameworkEditorStyle::TaskColor;
 }
 
 FText UScriptableEdGraphNode_Task::GetTooltipText() const
@@ -51,10 +51,12 @@ FText UScriptableEdGraphNode_Task::GetTooltipText() const
 
 FSlateIcon UScriptableEdGraphNode_Task::GetIconAndTint(FLinearColor& OutColor) const
 {
-	// The wrapped task's own icon, or the plain task block while the node is empty
+	// The wrapped task's own icon, or the plain task block while the node is empty; white, since the title bar already wears the task colour
 	const UScriptableNode_Task* TaskNode = Cast<UScriptableNode_Task>(GetRuntimeNode());
 	const UClass* TaskClass = TaskNode && TaskNode->Task ? TaskNode->Task->GetClass() : UScriptableTask::StaticClass();
-	return FScriptableFrameworkEditorStyle::GetScriptableObjectIcon(TaskClass, OutColor);
+	const FSlateIcon Icon = FScriptableFrameworkEditorStyle::GetScriptableObjectIcon(TaskClass, OutColor);
+	OutColor = FLinearColor::White;
+	return Icon;
 }
 
 bool UScriptableEdGraphNode_Task::ShouldShowPinLabel(FName PinName) const

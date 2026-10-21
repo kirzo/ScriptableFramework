@@ -44,6 +44,22 @@ void SScriptableGraphNode_Base::GetOverlayBrushes(bool bSelected, const FVector2
 	/** Active-node halo rendered as a tinted box via OnPaint — the Kismet InstructionPointer brush is 72x72 and dominates the canvas when multiple nodes are active at once. */
 }
 
+FSlateColor SScriptableGraphNode_Base::GetNodeTitleColor() const
+{
+	// The engine's title spill texture greys and darkens the colour by about half, so the palette goes in brighter and more saturated
+	constexpr float SaturationBoost = 1.3f;
+	constexpr float ValueBoost = 1.15f;
+
+	const FLinearColor Color = SGraphNode::GetNodeTitleColor().GetSpecifiedColor();
+	FLinearColor HSV = Color.ToFColorSRGB().ReinterpretAsLinear().LinearRGBToHSV();
+	HSV.G = FMath::Min(HSV.G * SaturationBoost, 1.0f);
+	HSV.B = FMath::Min(HSV.B * ValueBoost, 1.0f);
+
+	FLinearColor Boosted = FLinearColor::FromSRGBColor(HSV.HSVToLinearRGB().ToFColor(false));
+	Boosted.A = Color.A;
+	return Boosted;
+}
+
 int32 SScriptableGraphNode_Base::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const
 {
 	bool bActive = false;

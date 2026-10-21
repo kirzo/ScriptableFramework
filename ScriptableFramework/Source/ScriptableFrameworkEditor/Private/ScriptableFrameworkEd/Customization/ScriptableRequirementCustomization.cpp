@@ -57,7 +57,7 @@ FName FScriptableRequirementCustomization::GetModePropertyName() const
 
 FSlateColor FScriptableRequirementCustomization::GetIconColor() const
 {
-	return FScriptableFrameworkEditorStyle::ScriptableConditionColor;
+	return FScriptableFrameworkEditorStyle::ConditionColor;
 }
 
 FText FScriptableRequirementCustomization::GetAddButtonTooltip() const

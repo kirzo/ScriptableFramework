@@ -14,7 +14,7 @@ UScriptableEdGraphNode_Branch::UScriptableEdGraphNode_Branch()
 
 FLinearColor UScriptableEdGraphNode_Branch::GetNodeTitleColor() const
 {
-	return FScriptableFrameworkEditorStyle::ScriptableConditionColor;
+	return FScriptableFrameworkEditorStyle::RequirementColor;
 }
 
 FSlateIcon UScriptableEdGraphNode_Branch::GetIconAndTint(FLinearColor& OutColor) const
