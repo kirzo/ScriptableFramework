@@ -9,6 +9,7 @@
 
 #include "IPropertyUtilities.h"
 #include "PropertyHandle.h"
+#include "Widgets/Layout/SBox.h"
 
 void FScriptableTaskSetLocalCustomization::ProcessPropertyHandle(TSharedRef<IPropertyHandle> SubPropertyHandle, IDetailChildrenBuilder& ChildBuilder, UScriptableObject* Obj, const TArray<FPropertyBindingBindableStructDescriptor>& AccessibleStructs)
 {
@@ -54,5 +55,6 @@ void FScriptableTaskSetLocalCustomization::ProcessPropertyHandle(TSharedRef<IPro
 			}
 		});
 
-	FKzVariantCustomization::AddVariantRow(SubPropertyHandle, SubPropertyHandle, ChildBuilder, Picker);
+	// The name column stretches its content; the picker keeps its own width.
+	FKzVariantCustomization::AddVariantRow(SubPropertyHandle, SubPropertyHandle, ChildBuilder, SNew(SBox).HAlign(HAlign_Left)[Picker]);
 }
