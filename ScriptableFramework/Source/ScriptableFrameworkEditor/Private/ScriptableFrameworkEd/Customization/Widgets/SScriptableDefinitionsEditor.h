@@ -54,6 +54,7 @@ public:
 	static const FName NameColumn;
 	static const FName TypeColumn;
 	static const FName ValueColumn;
+	static const FName UsesColumn;
 	static const FName ActionsColumn;
 
 	SLATE_BEGIN_ARGS(SScriptableDefinitionsEditor)
@@ -88,6 +89,14 @@ private:
 	FScriptableContainer* GetContainer() const;
 	FKzNamedVariant* GetLocal(const FRow& Row) const;
 	const FKzParamDef* FindContext(FName Name) const;
+	FName GetRowName(const TSharedPtr<FRow>& Row) const;
+	const FGuid& GetSourceID() const;
+
+	/** Why the row can't take the name, or empty when it can: none, invalid characters, or another entry of the tab already has it. */
+	FText GetNameError(const TSharedPtr<FRow>& Row, FName Name) const;
+
+	/** Bindings and tasks reading the entry. */
+	int32 CountUses(const TSharedPtr<FRow>& Row) const;
 
 	void Regenerate();
 	TSharedPtr<FRow> MakeLocalRow(int32 Index);
@@ -119,6 +128,11 @@ private:
 	TArray<TSharedPtr<FRow>> Rows;
 	TSharedPtr<STreeView<TSharedPtr<FRow>>> TreeView;
 	TSharedPtr<SHeaderRow> HeaderRow;
+
+	/** Column fill widths, remembered across windows. */
+	float NameFill = 0.35f;
+	float TypeFill = 0.25f;
+	float ValueFill = 0.4f;
 
 	/** A value edit's transaction, when the row generator did not open one. */
 	TUniquePtr<FScopedTransaction> ValueTransaction;

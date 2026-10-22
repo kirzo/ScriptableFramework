@@ -15,6 +15,7 @@
 #include "IPropertyRowGenerator.h"
 #include "Input/DragAndDrop.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/MessageDialog.h"
 #include "Misc/PackageName.h"
 #include "Modules/ModuleManager.h"
 #include "PropertyEditorModule.h"
@@ -41,6 +42,7 @@
 const FName SScriptableDefinitionsEditor::NameColumn(TEXT("Name"));
 const FName SScriptableDefinitionsEditor::TypeColumn(TEXT("Type"));
 const FName SScriptableDefinitionsEditor::ValueColumn(TEXT("Value"));
+const FName SScriptableDefinitionsEditor::UsesColumn(TEXT("Uses"));
 const FName SScriptableDefinitionsEditor::ActionsColumn(TEXT("Actions"));
 
 namespace ScriptableDefinitionsEditor
@@ -68,6 +70,16 @@ namespace ScriptableDefinitionsEditor
 			}
 		}
 		return nullptr;
+	}
+
+	FName ToName(const FText& Text)
+	{
+		return FName(*Text.ToString().TrimStartAndEnd());
+	}
+
+	void SaveFill(const TCHAR* Key, float Fill)
+	{
+		GConfig->SetFloat(ConfigSection, Key, Fill, GEditorPerProjectIni);
 	}
 
 	/** Base, then Base1, Base2... until no entry uses it. */
@@ -312,17 +324,32 @@ void SScriptableDefinitionsEditor::Construct(const FArguments& InArgs, const TSh
 	const FStructProperty* StructProperty = CastField<FStructProperty>(InContainerHandle->GetProperty());
 	ContainerStruct = StructProperty ? StructProperty->Struct.Get() : FScriptableContainer::StaticStruct();
 
+	GConfig->GetFloat(ScriptableDefinitionsEditor::ConfigSection, TEXT("NameFill"), NameFill, GEditorPerProjectIni);
+	GConfig->GetFloat(ScriptableDefinitionsEditor::ConfigSection, TEXT("TypeFill"), TypeFill, GEditorPerProjectIni);
+	GConfig->GetFloat(ScriptableDefinitionsEditor::ConfigSection, TEXT("ValueFill"), ValueFill, GEditorPerProjectIni);
+
+	// With OnWidthChanged bound the header stops keeping widths itself; they come back through FillWidth.
 	SAssignNew(HeaderRow, SHeaderRow)
 		+ SHeaderRow::Column(NameColumn)
 		.DefaultLabel(LOCTEXT("NameColumn", "Name"))
-		.FillWidth(0.35f)
+		.FillWidth_Lambda([this]() { return NameFill; })
+		.OnWidthChanged_Lambda([this](float Fill) { NameFill = Fill; ScriptableDefinitionsEditor::SaveFill(TEXT("NameFill"), Fill); })
 		+ SHeaderRow::Column(TypeColumn)
 		.DefaultLabel(LOCTEXT("TypeColumn", "Type"))
-		.FillWidth(0.25f)
+		.FillWidth_Lambda([this]() { return TypeFill; })
+		.OnWidthChanged_Lambda([this](float Fill) { TypeFill = Fill; ScriptableDefinitionsEditor::SaveFill(TEXT("TypeFill"), Fill); })
 		+ SHeaderRow::Column(ValueColumn)
 		.DefaultLabel(LOCTEXT("ValueColumn", "Initial Value"))
-		.FillWidth(0.4f)
+		.FillWidth_Lambda([this]() { return ValueFill; })
+		.OnWidthChanged_Lambda([this](float Fill) { ValueFill = Fill; ScriptableDefinitionsEditor::SaveFill(TEXT("ValueFill"), Fill); })
 		.ShouldGenerateWidget_Lambda([this]() { return Tab == ETab::Locals; })
+		+ SHeaderRow::Column(UsesColumn)
+		.DefaultLabel(LOCTEXT("UsesColumn", "Uses"))
+		.DefaultTooltip(LOCTEXT("UsesColumnTooltip", "Bindings and tasks that read the entry"))
+		.FixedWidth(48.0f)
+		.HAlignHeader(HAlign_Center)
+		.HAlignCell(HAlign_Center)
+		.VAlignCell(VAlign_Center)
 		+ SHeaderRow::Column(ActionsColumn)
 		.DefaultLabel(FText::GetEmpty())
 		.FixedWidth(32.0f);
@@ -584,12 +611,23 @@ TSharedRef<SWidget> SScriptableDefinitionsEditor::MakeCell(const TSharedPtr<FRow
 
 	if (Column == NameColumn)
 	{
-		return SNew(SEditableTextBox)
+		// A name that fails verification never commits; the box shows the reason instead.
+		const TSharedRef<SEditableTextBox> NameBox = SNew(SEditableTextBox)
 			.Text_Lambda([this, Row]() { return GetEntryName(Row); })
+			.RevertTextOnEscape(true)
+			.OnVerifyTextChanged_Lambda([this, Row](const FText& Text, FText& OutError)
+			{
+				OutError = GetNameError(Row, ScriptableDefinitionsEditor::ToName(Text));
+				return OutError.IsEmpty();
+			})
 			.OnTextCommitted_Lambda([this, Row](const FText& Text, ETextCommit::Type)
 			{
-				Rename(Row, FName(*Text.ToString().TrimStartAndEnd()));
+				Rename(Row, ScriptableDefinitionsEditor::ToName(Text));
 			});
+
+		// A name already wrong when saved, such as a duplicate from older data.
+		NameBox->SetError(GetNameError(Row, GetRowName(Row)));
+		return NameBox;
 	}
 
 	if (Column == TypeColumn)
@@ -639,6 +677,13 @@ TSharedRef<SWidget> SScriptableDefinitionsEditor::MakeCell(const TSharedPtr<FRow
 			[
 				MakeNodeCell(Row->Node, false)
 			];
+	}
+
+	if (Column == UsesColumn)
+	{
+		return SNew(STextBlock)
+			.Text_Lambda([this, Row]() { return FText::AsNumber(CountUses(Row)); })
+			.ColorAndOpacity_Lambda([this, Row]() { return CountUses(Row) > 0 ? FSlateColor::UseForeground() : FSlateColor::UseSubduedForeground(); });
 	}
 
 	if (Column == ActionsColumn)
@@ -744,9 +789,8 @@ void SScriptableDefinitionsEditor::EndChange()
 
 void SScriptableDefinitionsEditor::Rename(const TSharedPtr<FRow>& Row, FName NewName)
 {
-	const FKzNamedVariant* Local = Tab == ETab::Locals ? GetLocal(*Row) : nullptr;
-	const FName OldName = Local ? Local->GetName() : Row->ContextName;
-	if (NewName.IsNone() || NewName == OldName || (Tab == ETab::Locals && !Local))
+	const FName OldName = GetRowName(Row);
+	if (NewName == OldName || (Tab == ETab::Locals && !GetLocal(*Row)) || !GetNameError(Row, NewName).IsEmpty())
 	{
 		return;
 	}
@@ -763,9 +807,8 @@ void SScriptableDefinitionsEditor::Rename(const TSharedPtr<FRow>& Row, FName New
 			ScriptableDefinitionsEditor::EditContext(Current, OldName, [NewName](FKzParamDef& Def) { Def.Name = NewName; });
 		}
 
-		// Bindings and Set Local tasks follow the rename.
-		const FGuid& SourceID = bLocals ? ScriptableBindingSources::LocalsStructID : ScriptableBindingSources::ContextStructID;
-		FScriptableContainerCustomization::RedirectBindingsInContainer(&Current, ContainerStruct, SourceID, OldName, NewName);
+		// Bindings and the tasks naming a Local follow the rename.
+		FScriptableContainerCustomization::RedirectBindingsInContainer(&Current, ContainerStruct, GetSourceID(), OldName, NewName);
 	});
 }
 
@@ -789,6 +832,12 @@ void SScriptableDefinitionsEditor::SetType(const TSharedPtr<FRow>& Row, EPropert
 
 void SScriptableDefinitionsEditor::Delete(const TSharedPtr<FRow>& Row)
 {
+	const int32 Uses = CountUses(Row);
+	if (Uses > 0 && FMessageDialog::Open(EAppMsgType::YesNo, FText::Format(LOCTEXT("DeleteInUse", "{0} is read by {1} {1}|plural(one=binding or task,other=bindings or tasks), which will stop working. Delete it anyway?"), GetEntryName(Row), Uses)) != EAppReturnType::Yes)
+	{
+		return;
+	}
+
 	ApplyChange(LOCTEXT("DeleteDefinition", "Delete Definition"), [this, Row](FScriptableContainer& Current)
 	{
 		if (Tab == ETab::Locals)
@@ -813,8 +862,57 @@ void SScriptableDefinitionsEditor::Delete(const TSharedPtr<FRow>& Row)
 
 FText SScriptableDefinitionsEditor::GetEntryName(const TSharedPtr<FRow>& Row) const
 {
+	return FText::FromName(GetRowName(Row));
+}
+
+FName SScriptableDefinitionsEditor::GetRowName(const TSharedPtr<FRow>& Row) const
+{
 	const FKzNamedVariant* Local = Tab == ETab::Locals ? GetLocal(*Row) : nullptr;
-	return FText::FromName(Local ? Local->GetName() : Row->ContextName);
+	return Local ? Local->GetName() : Row->ContextName;
+}
+
+const FGuid& SScriptableDefinitionsEditor::GetSourceID() const
+{
+	return Tab == ETab::Locals ? ScriptableBindingSources::LocalsStructID : ScriptableBindingSources::ContextStructID;
+}
+
+FText SScriptableDefinitionsEditor::GetNameError(const TSharedPtr<FRow>& Row, FName Name) const
+{
+	if (Name.IsNone())
+	{
+		return LOCTEXT("EmptyName", "Enter a name.");
+	}
+	if (!FInstancedPropertyBag::IsPropertyNameValid(Name))
+	{
+		return LOCTEXT("InvalidName", "Names can't contain symbols such as . / : ' \" ( ) [ ] < > = @ #");
+	}
+
+	// The row's own name is in the list once.
+	int32 Others = Name == GetRowName(Row) ? -1 : 0;
+	if (const FScriptableContainer* Current = GetContainer())
+	{
+		if (Tab == ETab::Locals)
+		{
+			for (const FKzNamedVariant& Local : Current->LocalsDefinitions)
+			{
+				Others += Local.GetName() == Name ? 1 : 0;
+			}
+		}
+		else
+		{
+			for (const FKzParamDef& Def : Current->ContextDefinitions)
+			{
+				Others += Def.Name == Name ? 1 : 0;
+			}
+		}
+	}
+	return Others > 0 ? FText::Format(LOCTEXT("DuplicateName", "Another entry is already named {0}."), FText::FromName(Name)) : FText::GetEmpty();
+}
+
+int32 SScriptableDefinitionsEditor::CountUses(const TSharedPtr<FRow>& Row) const
+{
+	FScriptableContainer* Current = GetContainer();
+	return Current ? FScriptableContainerCustomization::CountReferencesInContainer(Current, ContainerStruct, GetSourceID(), GetRowName(Row)) : 0;
 }
 
 void SScriptableDefinitionsEditor::MoveEntry(const TSharedPtr<FRow>& Source, const TSharedPtr<FRow>& Target, bool bBelow)
