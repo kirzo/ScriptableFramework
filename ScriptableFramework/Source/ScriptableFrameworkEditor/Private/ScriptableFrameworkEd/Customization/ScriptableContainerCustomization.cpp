@@ -3,6 +3,7 @@
 #include "ScriptableFrameworkEd/Customization/ScriptableContainerCustomization.h"
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "ScriptableFrameworkEditorStyle.h"
+#include "Widgets/SScriptableDefinitionsEditor.h"
 #include "Widgets/SScriptableTypePicker.h"
 
 #include "ScriptableContainer.h"
@@ -12,9 +13,6 @@
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableTasks/ScriptableTask_SetLocal.h"
 #include "Bindings/ScriptablePropertyBindings.h"
-#include "Core/KzParamDef.h"
-#include "Core/KzNamedVariant.h"
-#include "UObject/UObjectIterator.h"
 #include "UObject/UnrealType.h"
 
 #include "DetailLayoutBuilder.h"
@@ -27,9 +25,6 @@
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Images/SImage.h"
-#include "Modules/ModuleManager.h"
-#include "PropertyEditorModule.h"
-#include "IStructureDetailsView.h"
 
 #include "Engine/World.h"
 
@@ -270,7 +265,7 @@ FReply FScriptableContainerCustomization::OnModeClicked()
 	return FReply::Handled();
 }
 
-void FScriptableContainerCustomization::RedirectBindingsInContainer(FScriptableContainer* Container, const UScriptStruct* ConcreteStruct, const FGuid& ExpectedSourceID, FName OldName, FName NewName) const
+void FScriptableContainerCustomization::RedirectBindingsInContainer(FScriptableContainer* Container, const UScriptStruct* ConcreteStruct, const FGuid& ExpectedSourceID, FName OldName, FName NewName)
 {
 	if (!Container || !ConcreteStruct) return;
 
@@ -420,269 +415,19 @@ EVisibility FScriptableContainerCustomization::GetContextButtonVisibility() cons
 
 FReply FScriptableContainerCustomization::OnEditContextClicked()
 {
-	if (!StructHandle.IsValid())
+	if (StructHandle.IsValid())
 	{
-		return FReply::Handled();
+		SScriptableDefinitionsEditor::Open(StructHandle.ToSharedRef(), SScriptableDefinitionsEditor::ETab::Context);
 	}
-
-	// Get the raw pointer to the struct
-	TArray<void*> RawData;
-	StructHandle->AccessRawData(RawData);
-
-	if (RawData.Num() != 1 || RawData[0] == nullptr)
-	{
-		return FReply::Handled();
-	}
-
-	FScriptableContainer* ContainerInstance = static_cast<FScriptableContainer*>(RawData[0]);
-
-	// 2. Setup the Structure Details View
-	FStructureDetailsViewArgs StructViewArgs;
-	StructViewArgs.bShowObjects = true;
-	StructViewArgs.bShowAssets = true;
-	StructViewArgs.bShowClasses = true;
-	StructViewArgs.bShowInterfaces = true;
-
-	FDetailsViewArgs ViewArgs;
-	ViewArgs.bAllowSearch = false;
-	ViewArgs.bHideSelectionTip = true;
-	ViewArgs.bShowObjectLabel = false;
-
-	TSharedPtr<FStructOnScope> StructOnScope = MakeShareable(new FStructOnScope(FScriptableContainer::StaticStruct(), (uint8*)ContainerInstance));
-
-	// Create the View
-	FPropertyEditorModule& PropertyEditorModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
-
-	TSharedPtr<IStructureDetailsView> StructureView = PropertyEditorModule.CreateStructureDetailView(
-		ViewArgs,
-		StructViewArgs,
-		StructOnScope,
-		LOCTEXT("EditDefinitionsTitle", "Edit Definitions")
-	);
-
-	if (StructureView)
-	{
-		// Show the ContextDefinitions row AND every nested property under it (struct fields, array element children,
-		// inner Variant value slots, etc). Filtering by exact name would hide all inner rows.
-		StructureView->GetDetailsView()->SetIsPropertyVisibleDelegate(FIsPropertyVisible::CreateLambda([](const FPropertyAndParent& PropertyAndParent)
-			{
-				static const FName TargetName = GET_MEMBER_NAME_CHECKED(FScriptableContainer, ContextDefinitions);
-				if (PropertyAndParent.Property.GetFName() == TargetName) return true;
-				for (const FProperty* Parent : PropertyAndParent.ParentProperties)
-				{
-					if (Parent && Parent->GetFName() == TargetName) return true;
-				}
-				return false;
-			}));
-
-		// Snapshot the current Context name set so single-entry renames can be detected when the popup commits edits.
-		TSet<FName> ContextNameSnapshot;
-		for (const FKzParamDef& Def : ContainerInstance->ContextDefinitions)
-		{
-			if (!Def.Name.IsNone()) ContextNameSnapshot.Add(Def.Name);
-		}
-
-		// Callback: Detect rename, Reconstruct Bag on Change + cascade re-bake to nested tasks.
-		StructureView->GetOnFinishedChangingPropertiesDelegate().AddLambda(
-			[ContainerInstance, this, ContextNameSnapshot = MoveTemp(ContextNameSnapshot)](const FPropertyChangedEvent& Event) mutable
-			{
-				if (!ContainerInstance) return;
-
-				// Set-diff: TSet iteration order isn't reliable so we compare name sets, not indices. A single
-				// rename shows as exactly one added + one removed; anything else (add, remove, multi-edit)
-				// skips the redirect and is cleaned up via SanitizeObsoleteBindings.
-				TSet<FName> CurrentNames;
-				for (const FKzParamDef& Def : ContainerInstance->ContextDefinitions)
-				{
-					if (!Def.Name.IsNone()) CurrentNames.Add(Def.Name);
-				}
-				const TSet<FName> Removed = ContextNameSnapshot.Difference(CurrentNames);
-				const TSet<FName> Added = CurrentNames.Difference(ContextNameSnapshot);
-				if (Removed.Num() == 1 && Added.Num() == 1)
-				{
-					const FName OldName = *Removed.CreateConstIterator();
-					const FName NewName = *Added.CreateConstIterator();
-					if (!OldName.IsNone() && !NewName.IsNone() && OldName != NewName)
-					{
-						const FStructProperty* RootStructProp = StructHandle.IsValid() ? CastField<FStructProperty>(StructHandle->GetProperty()) : nullptr;
-						RedirectBindingsInContainer(ContainerInstance, RootStructProp ? RootStructProp->Struct : nullptr, ScriptableBindingSources::ContextStructID, OldName, NewName);
-					}
-				}
-				ContextNameSnapshot = MoveTemp(CurrentNames);
-
-				StructHandle->NotifyPreChange();
-
-				ContainerInstance->ConstructContext();
-
-				if (StructHandle.IsValid())
-				{
-					StructHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
-				}
-
-				// NotifyPostChange only fires PostEditChange on the owning UObject (often not a
-				// UScriptableObject), so the nested tasks never get their auto-bindings re-baked.
-				// Walk every UScriptableObject under the owning UObject(s) and re-bake explicitly.
-				TArray<UObject*> OuterObjects;
-				StructHandle->GetOuterObjects(OuterObjects);
-				for (UObject* OuterObj : OuterObjects)
-				{
-					if (!OuterObj) continue;
-
-					TArray<UObject*> NestedObjects;
-					GetObjectsWithOuter(OuterObj, NestedObjects, /*bIncludeNestedObjects*/ true);
-					for (UObject* NestedObj : NestedObjects)
-					{
-						if (UScriptableObject* SO = Cast<UScriptableObject>(NestedObj))
-						{
-							SO->BakeAutoBindings();
-						}
-					}
-				}
-			});
-
-		// Create the Window
-		TSharedRef<SWindow> Window = SNew(SWindow)
-			.Title(LOCTEXT("EditDefinitionsTitle", "Edit Definitions"))
-			.ClientSize(FVector2D(450.f, 400.f))
-			.SupportsMinimize(false)
-			.SupportsMaximize(false);
-
-		Window->SetContent(
-			SNew(SBox)
-			.Padding(4.0f)
-			[
-				StructureView->GetWidget().ToSharedRef()
-			]
-		);
-
-		// Open immediately
-		FSlateApplication::Get().AddWindow(Window);
-	}
-
 	return FReply::Handled();
 }
 
 FReply FScriptableContainerCustomization::OnEditLocalsClicked()
 {
-	if (!StructHandle.IsValid()) return FReply::Handled();
-
-	TArray<void*> RawData;
-	StructHandle->AccessRawData(RawData);
-	if (RawData.Num() != 1 || RawData[0] == nullptr) return FReply::Handled();
-
-	FScriptableContainer* ContainerInstance = static_cast<FScriptableContainer*>(RawData[0]);
-
-	FStructureDetailsViewArgs StructViewArgs;
-	StructViewArgs.bShowObjects = true;
-	StructViewArgs.bShowAssets = true;
-	StructViewArgs.bShowClasses = true;
-	StructViewArgs.bShowInterfaces = true;
-
-	FDetailsViewArgs ViewArgs;
-	ViewArgs.bAllowSearch = false;
-	ViewArgs.bHideSelectionTip = true;
-	ViewArgs.bShowObjectLabel = false;
-
-	TSharedPtr<FStructOnScope> StructOnScope = MakeShareable(new FStructOnScope(FScriptableContainer::StaticStruct(), (uint8*)ContainerInstance));
-
-	FPropertyEditorModule& PropertyEditorModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
-
-	TSharedPtr<IStructureDetailsView> StructureView = PropertyEditorModule.CreateStructureDetailView(
-		ViewArgs,
-		StructViewArgs,
-		StructOnScope,
-		LOCTEXT("EditDefinitionsTitle", "Edit Definitions")
-	);
-
-	if (StructureView)
+	if (StructHandle.IsValid())
 	{
-		StructureView->GetDetailsView()->SetIsPropertyVisibleDelegate(FIsPropertyVisible::CreateLambda([](const FPropertyAndParent& PropertyAndParent)
-			{
-				static const FName TargetName = GET_MEMBER_NAME_CHECKED(FScriptableContainer, LocalsDefinitions);
-				if (PropertyAndParent.Property.GetFName() == TargetName) return true;
-				for (const FProperty* Parent : PropertyAndParent.ParentProperties)
-				{
-					if (Parent && Parent->GetFName() == TargetName) return true;
-				}
-				return false;
-			}));
-
-		// Snapshot Locals name set so single-entry renames can be detected when the popup commits edits.
-		TSet<FName> LocalsNameSnapshot;
-		for (const FKzNamedVariant& Var : ContainerInstance->LocalsDefinitions)
-		{
-			if (!Var.GetName().IsNone()) LocalsNameSnapshot.Add(Var.GetName());
-		}
-
-		// Mirror Context's flow: detect rename, rebuild the runtime bag, re-bake nested binding caches.
-		StructureView->GetOnFinishedChangingPropertiesDelegate().AddLambda(
-			[ContainerInstance, this, LocalsNameSnapshot = MoveTemp(LocalsNameSnapshot)](const FPropertyChangedEvent& Event) mutable
-			{
-				if (!ContainerInstance) return;
-
-				TSet<FName> CurrentNames;
-				for (const FKzNamedVariant& Var : ContainerInstance->LocalsDefinitions)
-				{
-					if (!Var.GetName().IsNone()) CurrentNames.Add(Var.GetName());
-				}
-				const TSet<FName> Removed = LocalsNameSnapshot.Difference(CurrentNames);
-				const TSet<FName> Added = CurrentNames.Difference(LocalsNameSnapshot);
-				if (Removed.Num() == 1 && Added.Num() == 1)
-				{
-					const FName OldName = *Removed.CreateConstIterator();
-					const FName NewName = *Added.CreateConstIterator();
-					if (!OldName.IsNone() && !NewName.IsNone() && OldName != NewName)
-					{
-						const FStructProperty* RootStructProp = StructHandle.IsValid() ? CastField<FStructProperty>(StructHandle->GetProperty()) : nullptr;
-						RedirectBindingsInContainer(ContainerInstance, RootStructProp ? RootStructProp->Struct : nullptr, ScriptableBindingSources::LocalsStructID, OldName, NewName);
-					}
-				}
-				LocalsNameSnapshot = MoveTemp(CurrentNames);
-
-				StructHandle->NotifyPreChange();
-
-				ContainerInstance->ConstructLocals();
-
-				if (StructHandle.IsValid())
-				{
-					StructHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
-				}
-
-				TArray<UObject*> OuterObjects;
-				StructHandle->GetOuterObjects(OuterObjects);
-				for (UObject* OuterObj : OuterObjects)
-				{
-					if (!OuterObj) continue;
-
-					TArray<UObject*> NestedObjects;
-					GetObjectsWithOuter(OuterObj, NestedObjects, /*bIncludeNestedObjects*/ true);
-					for (UObject* NestedObj : NestedObjects)
-					{
-						if (UScriptableObject* SO = Cast<UScriptableObject>(NestedObj))
-						{
-							SO->BakeAutoBindings();
-						}
-					}
-				}
-			});
-
-		TSharedRef<SWindow> Window = SNew(SWindow)
-			.Title(LOCTEXT("EditDefinitionsTitle", "Edit Definitions"))
-			.ClientSize(FVector2D(450.f, 400.f))
-			.SupportsMinimize(false)
-			.SupportsMaximize(false);
-
-		Window->SetContent(
-			SNew(SBox)
-			.Padding(4.0f)
-			[
-				StructureView->GetWidget().ToSharedRef()
-			]
-		);
-
-		FSlateApplication::Get().AddWindow(Window);
+		SScriptableDefinitionsEditor::Open(StructHandle.ToSharedRef(), SScriptableDefinitionsEditor::ETab::Locals);
 	}
-
 	return FReply::Handled();
 }
 
