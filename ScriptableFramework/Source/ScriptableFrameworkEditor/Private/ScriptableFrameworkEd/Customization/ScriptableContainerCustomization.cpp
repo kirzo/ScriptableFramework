@@ -3,17 +3,14 @@
 #include "ScriptableFrameworkEd/Customization/ScriptableContainerCustomization.h"
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "ScriptableFrameworkEditorStyle.h"
+#include "Widgets/ScriptableDefinitionsSource.h"
 #include "Widgets/SScriptableDefinitionsEditor.h"
 #include "Widgets/SScriptableTypePicker.h"
 
 #include "ScriptableContainer.h"
 #include "ScriptableObject.h"
 #include "ScriptableObjectAsset.h"
-#include "ScriptableRuntimeData.h"
 #include "ScriptableNodes/ScriptableNode.h"
-#include "ScriptableTasks/ScriptableTask_CallFunction.h"
-#include "ScriptableTasks/ScriptableTask_SetLocal.h"
-#include "Bindings/ScriptablePropertyBindings.h"
 #include "UObject/UnrealType.h"
 
 #include "DetailLayoutBuilder.h"
@@ -266,137 +263,6 @@ FReply FScriptableContainerCustomization::OnModeClicked()
 	return FReply::Handled();
 }
 
-namespace ScriptableContainerCustomization
-{
-	/** The fields of a task that name a Local directly rather than binding to it. */
-	void GetLocalNameFields(UScriptableObject& Object, TArray<FName*>& OutFields)
-	{
-		if (UScriptableTask_SetLocal* SetLocal = Cast<UScriptableTask_SetLocal>(&Object))
-		{
-			OutFields.Add(&SetLocal->VarName);
-		}
-		if (UScriptableTask_CallFunction* CallFunction = Cast<UScriptableTask_CallFunction>(&Object))
-		{
-			OutFields.Add(&CallFunction->ResultLocal);
-		}
-	}
-
-	bool ReadsName(const FScriptablePropertyBinding& Binding, const FGuid& SourceID, FName Name)
-	{
-		const TConstArrayView<FPropertyBindingPathSegment> Segments = Binding.SourcePath.GetSegments();
-		return Binding.SourceID == SourceID && Segments.Num() > 0 && Segments[0].GetName() == Name;
-	}
-}
-
-void FScriptableContainerCustomization::ForEachObjectInScope(FScriptableContainer* Container, const UScriptStruct* ConcreteStruct, const FGuid& SourceID, TFunctionRef<void(UScriptableObject&)> Visit)
-{
-	if (!Container || !ConcreteStruct)
-	{
-		return;
-	}
-
-	for (TFieldIterator<FArrayProperty> It(ConcreteStruct); It; ++It)
-	{
-		FArrayProperty* ArrayProp = *It;
-		FObjectProperty* InnerObjProp = CastField<FObjectProperty>(ArrayProp->Inner);
-		if (!InnerObjProp || !InnerObjProp->PropertyClass->IsChildOf(UScriptableObject::StaticClass()))
-		{
-			continue;
-		}
-
-		FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Container));
-		for (int32 Index = 0; Index < Helper.Num(); ++Index)
-		{
-			UScriptableObject* Object = Cast<UScriptableObject>(InnerObjProp->GetObjectPropertyValue(Helper.GetRawPtr(Index)));
-			if (!Object)
-			{
-				continue;
-			}
-
-			Visit(*Object);
-
-			// Nested containers (NestedAction's Action, NestedRequirement's Requirement) share the scope, except a unit
-			// declaring its own Locals, whose bindings resolve to its own bag.
-			for (TFieldIterator<FStructProperty> StructIt(Object->GetClass()); StructIt; ++StructIt)
-			{
-				FStructProperty* StructProp = *StructIt;
-				if (!StructProp->Struct->IsChildOf(FScriptableContainer::StaticStruct()))
-				{
-					continue;
-				}
-
-				FScriptableContainer* NestedContainer = StructProp->ContainerPtrToValuePtr<FScriptableContainer>(Object);
-				if (!NestedContainer || (SourceID == ScriptableBindingSources::LocalsStructID && NestedContainer->LocalsDefinitions.Num() > 0))
-				{
-					continue;
-				}
-
-				ForEachObjectInScope(NestedContainer, StructProp->Struct, SourceID, Visit);
-			}
-		}
-	}
-}
-
-void FScriptableContainerCustomization::RedirectBindingsInContainer(FScriptableContainer* Container, const UScriptStruct* ConcreteStruct, const FGuid& ExpectedSourceID, FName OldName, FName NewName)
-{
-	const bool bLocals = ExpectedSourceID == ScriptableBindingSources::LocalsStructID;
-	ForEachObjectInScope(Container, ConcreteStruct, ExpectedSourceID, [&](UScriptableObject& Object)
-	{
-		TArray<FName*> LocalNameFields;
-		if (bLocals)
-		{
-			ScriptableContainerCustomization::GetLocalNameFields(Object, LocalNameFields);
-		}
-
-		const bool bReadsOldName = Object.GetPropertyBindings().Bindings.ContainsByPredicate([&](const FScriptablePropertyBinding& Binding) { return ScriptableContainerCustomization::ReadsName(Binding, ExpectedSourceID, OldName); })
-			|| LocalNameFields.ContainsByPredicate([OldName](const FName* Field) { return *Field == OldName; });
-		if (!bReadsOldName)
-		{
-			return;
-		}
-
-		// Snapshot before the change, so undo restores the old name.
-		Object.Modify();
-		for (FScriptablePropertyBinding& Binding : Object.GetPropertyBindings().Bindings)
-		{
-			if (ScriptableContainerCustomization::ReadsName(Binding, ExpectedSourceID, OldName))
-			{
-				Binding.SourcePath.GetMutableSegments()[0].SetName(NewName);
-			}
-		}
-		for (FName* Field : LocalNameFields)
-		{
-			if (*Field == OldName)
-			{
-				*Field = NewName;
-			}
-		}
-	});
-}
-
-int32 FScriptableContainerCustomization::CountReferencesInContainer(FScriptableContainer* Container, const UScriptStruct* ConcreteStruct, const FGuid& SourceID, FName Name)
-{
-	int32 Count = 0;
-	ForEachObjectInScope(Container, ConcreteStruct, SourceID, [&](UScriptableObject& Object)
-	{
-		for (const FScriptablePropertyBinding& Binding : Object.GetPropertyBindings().Bindings)
-		{
-			Count += ScriptableContainerCustomization::ReadsName(Binding, SourceID, Name) ? 1 : 0;
-		}
-
-		if (SourceID == ScriptableBindingSources::LocalsStructID)
-		{
-			TArray<FName*> LocalNameFields;
-			ScriptableContainerCustomization::GetLocalNameFields(Object, LocalNameFields);
-			for (const FName* Field : LocalNameFields)
-			{
-				Count += *Field == Name ? 1 : 0;
-			}
-		}
-	});
-	return Count;
-}
-
 EVisibility FScriptableContainerCustomization::GetLocalsButtonVisibility() const
 {
 	if (!bShowLocalsButton) return EVisibility::Collapsed;
@@ -481,7 +347,7 @@ FReply FScriptableContainerCustomization::OnEditContextClicked()
 {
 	if (StructHandle.IsValid())
 	{
-		SScriptableDefinitionsEditor::Open(StructHandle.ToSharedRef(), SScriptableDefinitionsEditor::ETab::Context);
+		SScriptableDefinitionsEditor::OpenWindow(MakeShared<FScriptableContainerDefinitionsSource>(StructHandle.ToSharedRef()), SScriptableDefinitionsEditor::ETab::Context);
 	}
 	return FReply::Handled();
 }
@@ -490,7 +356,7 @@ FReply FScriptableContainerCustomization::OnEditLocalsClicked()
 {
 	if (StructHandle.IsValid())
 	{
-		SScriptableDefinitionsEditor::Open(StructHandle.ToSharedRef(), SScriptableDefinitionsEditor::ETab::Locals);
+		SScriptableDefinitionsEditor::OpenWindow(MakeShared<FScriptableContainerDefinitionsSource>(StructHandle.ToSharedRef()), SScriptableDefinitionsEditor::ETab::Locals);
 	}
 	return FReply::Handled();
 }

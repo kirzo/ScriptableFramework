@@ -5,31 +5,25 @@
 #include "CoreMinimal.h"
 #include "EditorUndoClient.h"
 #include "Misc/NotifyHook.h"
+#include "ScriptableFrameworkEd/Customization/Widgets/ScriptableDefinitionsSource.h"
 #include "StructUtils/PropertyBag.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/Views/STreeView.h"
 
 class FScopedTransaction;
 class IDetailTreeNode;
-class IPropertyHandle;
 class IPropertyRowGenerator;
 class SHeaderRow;
-struct FKzNamedVariant;
-struct FKzParamDef;
-struct FScriptableContainer;
+class SWindow;
 
 /**
- * Context and Locals of a container in one window, a tab each, as a table of name, type and, for Locals, initial value. Structural edits work on
- * the container directly, each an undoable change of its owners; initial values are edited through a row generator per Local.
+ * Context and Locals of a definitions source in one widget, a tab each, as a table of name, type and, for Locals, initial value. Structural edits
+ * work on the source directly, each an undoable change of its owners; initial values are edited through a row generator per Local.
  */
 class SScriptableDefinitionsEditor : public SCompoundWidget, public FNotifyHook, public FSelfRegisteringEditorUndoClient
 {
 public:
-	enum class ETab : uint8
-	{
-		Context,
-		Locals
-	};
+	using ETab = EScriptableDefinitionsTab;
 
 	/** An entry of the open tab, or a member of a Local's struct value under it. */
 	struct FRow
@@ -39,7 +33,7 @@ public:
 		/** The Local's index, for Locals. */
 		int32 LocalIndex = INDEX_NONE;
 
-		/** The entry's name, for Context, whose set has no stable index. */
+		/** The entry's name, for Context, whose entries have no stable index. */
 		FName ContextName;
 
 		/** Owns the value's widgets, for Locals. */
@@ -63,10 +57,10 @@ public:
 		SLATE_ARGUMENT(ETab, Tab)
 	SLATE_END_ARGS()
 
-	/** Opens the window on the container behind the handle at the tab, or brings back the one already open on it. */
-	static void Open(const TSharedRef<IPropertyHandle>& InContainerHandle, ETab InTab);
+	/** Opens a window on the source at the tab, or brings back the one already open on what it edits. */
+	static void OpenWindow(const TSharedRef<FScriptableDefinitionsSource>& InSource, ETab InTab);
 
-	void Construct(const FArguments& InArgs, const TSharedRef<IPropertyHandle>& InContainerHandle);
+	void Construct(const FArguments& InArgs, const TSharedRef<FScriptableDefinitionsSource>& InSource);
 	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
 	void SetTab(ETab InTab);
@@ -76,8 +70,8 @@ public:
 
 	FText GetEntryName(const TSharedPtr<FRow>& Row) const;
 
-	/** Moves the dragged entry next to the target: below it, or above. Context, a set, is rebuilt in the new order, which it then iterates in. */
-	void MoveEntry(const TSharedPtr<FRow>& Source, const TSharedPtr<FRow>& Target, bool bBelow);
+	/** Moves the dragged entry next to the target: below it, or above. */
+	void MoveEntry(const TSharedPtr<FRow>& SourceRow, const TSharedPtr<FRow>& TargetRow, bool bBelow);
 
 	virtual void NotifyPreChange(FProperty* PropertyAboutToChange) override;
 	virtual void NotifyPostChange(const FPropertyChangedEvent& PropertyChangedEvent, FProperty* PropertyThatChanged) override;
@@ -85,44 +79,35 @@ public:
 	virtual void PostRedo(bool bSuccess) override;
 
 private:
-	/** The container, or null once one of its owners is gone. */
-	FScriptableContainer* GetContainer() const;
 	FKzNamedVariant* GetLocal(const FRow& Row) const;
-	const FKzParamDef* FindContext(FName Name) const;
+	TOptional<FKzParamDef> FindContext(FName Name) const;
 	FName GetRowName(const TSharedPtr<FRow>& Row) const;
-	const FGuid& GetSourceID() const;
 
 	/** Why the row can't take the name, or empty when it can: none, invalid characters, or another entry of the tab already has it. */
 	FText GetNameError(const TSharedPtr<FRow>& Row, FName Name) const;
-
-	/** Bindings and tasks reading the entry. */
-	int32 CountUses(const TSharedPtr<FRow>& Row) const;
 
 	void Regenerate();
 	TSharedPtr<FRow> MakeLocalRow(int32 Index);
 	void AddMemberRows(FRow& Parent, const TSharedRef<IDetailTreeNode>& Node);
 
-	/** Runs a structural edit as one undoable change of the container's owners, then rebuilds the rows. */
-	void ApplyChange(const FText& Description, TFunctionRef<void(FScriptableContainer&)> Edit);
+	/** Runs a structural edit of the open tab as one undoable change of the source's owners, then rebuilds the rows. */
+	void ApplyChange(const FText& Description, TFunctionRef<void()> Edit);
 
-	/** Snapshots the owners for undo before a change, and lets them and their nested tasks catch up after it. */
-	void BeginChange();
-	void EndChange();
+	/** Rewrites the Context entries through a copy, the source keeping its own storage. */
+	void EditContext(TFunctionRef<void(TArray<FKzParamDef>&)> Edit);
 
 	void Rename(const TSharedPtr<FRow>& Row, FName NewName);
 	void SetType(const TSharedPtr<FRow>& Row, EPropertyBagPropertyType Type, const UObject* TypeObject, EPropertyBagContainerType ContainerType);
 	void Delete(const TSharedPtr<FRow>& Row);
 	void AddEntry();
 
-	FText GetTitle() const;
-
 	TSharedRef<ITableRow> OnGenerateRow(TSharedPtr<FRow> Row, const TSharedRef<STableViewBase>& OwnerTable);
 	void OnGetChildren(TSharedPtr<FRow> Row, TArray<TSharedPtr<FRow>>& OutChildren);
 
-	TSharedPtr<IPropertyHandle> ContainerHandle;
-	TArray<TWeakObjectPtr<UObject>> Owners;
-	FScriptableContainer* Container = nullptr;
-	const UScriptStruct* ContainerStruct = nullptr;
+	TSharedPtr<FScriptableDefinitionsSource> Source;
+
+	/** The window opened for this editor, closed once the source is gone. */
+	TWeakPtr<SWindow> OwnWindow;
 
 	ETab Tab = ETab::Locals;
 	TArray<TSharedPtr<FRow>> Rows;

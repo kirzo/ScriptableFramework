@@ -9,7 +9,6 @@
 
 class IPropertyUtilities;
 class SComboButton;
-class UScriptableObject;
 
 /**
  * Base customization for Scriptable Containers (Actions, Requirements).
@@ -59,15 +58,6 @@ protected:
 	virtual FText GetModeTooltip() const = 0;
 
 public:
-	/** Visits each scriptable object that sees the container's Context or Locals, recursing into nested containers that share the scope. */
-	static void ForEachObjectInScope(struct FScriptableContainer* Container, const class UScriptStruct* ConcreteStruct, const FGuid& SourceID, TFunctionRef<void(UScriptableObject&)> Visit);
-
-	/** Rewrites the bindings and the task fields that name a Local (Set Local, Call Function's result) reading OldName from the container's Context or Locals. */
-	static void RedirectBindingsInContainer(struct FScriptableContainer* Container, const class UScriptStruct* ConcreteStruct, const FGuid& ExpectedSourceID, FName OldName, FName NewName);
-
-	/** How many bindings and task fields read Name from the container's Context or Locals. */
-	static int32 CountReferencesInContainer(struct FScriptableContainer* Container, const class UScriptStruct* ConcreteStruct, const FGuid& SourceID, FName Name);
-
 	/** When false, the Context (parameters) button stays hidden. Wrapper customizations such as
 	 * NestedRequirement / NestedAction flip this off on the inner customization so the inner unit
 	 * inherits its parent scope instead of carrying its own context. */

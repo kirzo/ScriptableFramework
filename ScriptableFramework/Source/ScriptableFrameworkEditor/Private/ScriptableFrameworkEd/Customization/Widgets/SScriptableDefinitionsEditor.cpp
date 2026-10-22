@@ -1,12 +1,6 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableFrameworkEd/Customization/Widgets/SScriptableDefinitionsEditor.h"
-#include "ScriptableFrameworkEd/Customization/ScriptableContainerCustomization.h"
-#include "ScriptableContainer.h"
-#include "ScriptableObject.h"
-#include "ScriptableRuntimeData.h"
-#include "Core/KzNamedVariant.h"
-#include "Core/KzParamDef.h"
 #include "Widgets/SKzTypeSelector.h"
 
 #include "Framework/Application/SlateApplication.h"
@@ -16,14 +10,12 @@
 #include "Input/DragAndDrop.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/MessageDialog.h"
-#include "Misc/PackageName.h"
 #include "Modules/ModuleManager.h"
 #include "PropertyEditorModule.h"
 #include "PropertyHandle.h"
 #include "ScopedTransaction.h"
 #include "Styling/AppStyle.h"
 #include "UObject/StructOnScope.h"
-#include "UObject/UObjectHash.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SEditableTextBox.h"
@@ -49,8 +41,8 @@ namespace ScriptableDefinitionsEditor
 {
 	const TCHAR* const ConfigSection = TEXT("ScriptableFramework.DefinitionsWindow");
 
-	/** The editor open on each container, so its button brings it back instead of opening another. */
-	TMap<const FScriptableContainer*, TWeakPtr<SScriptableDefinitionsEditor>> OpenEditors;
+	/** The window open on each source key, so its button brings it back instead of opening another. */
+	TMap<const void*, TWeakPtr<SScriptableDefinitionsEditor>> OpenEditors;
 
 	/** The first property row under the nodes, depth first: a bag struct's single value. */
 	TSharedPtr<IDetailTreeNode> FindPropertyNode(const TArray<TSharedRef<IDetailTreeNode>>& Nodes)
@@ -91,22 +83,6 @@ namespace ScriptableDefinitionsEditor
 			Name = FName(*FString::Printf(TEXT("%s%d"), *Base, Suffix));
 		}
 		return Name;
-	}
-
-	/** Takes the Context entry out and back in around the edit, since the set hashes its entries by name and type. */
-	void EditContext(FScriptableContainer& Container, FName Name, TFunctionRef<void(FKzParamDef&)> Edit)
-	{
-		for (auto It = Container.ContextDefinitions.CreateIterator(); It; ++It)
-		{
-			if (It->Name == Name)
-			{
-				FKzParamDef Def = *It;
-				It.RemoveCurrent();
-				Edit(Def);
-				Container.ContextDefinitions.Add(Def);
-				return;
-			}
-		}
 	}
 
 	/** An entry being dragged to another place in its list. */
@@ -251,16 +227,14 @@ namespace ScriptableDefinitionsEditor
 	};
 }
 
-void SScriptableDefinitionsEditor::Open(const TSharedRef<IPropertyHandle>& InContainerHandle, ETab InTab)
+void SScriptableDefinitionsEditor::OpenWindow(const TSharedRef<FScriptableDefinitionsSource>& InSource, ETab InTab)
 {
-	TArray<void*> RawData;
-	InContainerHandle->AccessRawData(RawData);
-	if (RawData.Num() != 1 || !RawData[0])
+	if (!InSource->IsValid())
 	{
 		return;
 	}
 
-	const FScriptableContainer* Key = static_cast<const FScriptableContainer*>(RawData[0]);
+	const void* Key = InSource->GetKey();
 	if (const TSharedPtr<SScriptableDefinitionsEditor> Existing = ScriptableDefinitionsEditor::OpenEditors.FindRef(Key).Pin())
 	{
 		Existing->SetTab(InTab);
@@ -271,14 +245,14 @@ void SScriptableDefinitionsEditor::Open(const TSharedRef<IPropertyHandle>& InCon
 		return;
 	}
 
-	const TSharedRef<SScriptableDefinitionsEditor> Editor = SNew(SScriptableDefinitionsEditor, InContainerHandle).Tab(InTab);
+	const TSharedRef<SScriptableDefinitionsEditor> Editor = SNew(SScriptableDefinitionsEditor, InSource).Tab(InTab);
 	ScriptableDefinitionsEditor::OpenEditors.Add(Key, Editor);
 
 	FVector2D Size(640.0, 440.0);
 	GConfig->GetVector2D(ScriptableDefinitionsEditor::ConfigSection, TEXT("Size"), Size, GEditorPerProjectIni);
 
 	const TSharedRef<SWindow> Window = SNew(SWindow)
-		.Title(Editor->GetTitle())
+		.Title(InSource->GetTitle())
 		.ClientSize(Size)
 		.MinWidth(420.0f)
 		.MinHeight(260.0f)
@@ -294,6 +268,7 @@ void SScriptableDefinitionsEditor::Open(const TSharedRef<IPropertyHandle>& InCon
 		GConfig->SetVector2D(ScriptableDefinitionsEditor::ConfigSection, TEXT("Size"), ClosedSize, GEditorPerProjectIni);
 		ScriptableDefinitionsEditor::OpenEditors.Remove(Key);
 	}));
+	Editor->OwnWindow = Window;
 
 	// A child of the editor's main window, so it stays above it.
 	if (const TSharedPtr<SWindow> RootWindow = FGlobalTabmanager::Get()->GetRootWindow())
@@ -306,23 +281,10 @@ void SScriptableDefinitionsEditor::Open(const TSharedRef<IPropertyHandle>& InCon
 	}
 }
 
-void SScriptableDefinitionsEditor::Construct(const FArguments& InArgs, const TSharedRef<IPropertyHandle>& InContainerHandle)
+void SScriptableDefinitionsEditor::Construct(const FArguments& InArgs, const TSharedRef<FScriptableDefinitionsSource>& InSource)
 {
-	ContainerHandle = InContainerHandle;
+	Source = InSource;
 	Tab = InArgs._Tab;
-
-	TArray<UObject*> OuterObjects;
-	InContainerHandle->GetOuterObjects(OuterObjects);
-	for (UObject* Outer : OuterObjects)
-	{
-		Owners.Add(Outer);
-	}
-
-	TArray<void*> RawData;
-	InContainerHandle->AccessRawData(RawData);
-	Container = RawData.Num() == 1 ? static_cast<FScriptableContainer*>(RawData[0]) : nullptr;
-	const FStructProperty* StructProperty = CastField<FStructProperty>(InContainerHandle->GetProperty());
-	ContainerStruct = StructProperty ? StructProperty->Struct.Get() : FScriptableContainer::StaticStruct();
 
 	GConfig->GetFloat(ScriptableDefinitionsEditor::ConfigSection, TEXT("NameFill"), NameFill, GEditorPerProjectIni);
 	GConfig->GetFloat(ScriptableDefinitionsEditor::ConfigSection, TEXT("TypeFill"), TypeFill, GEditorPerProjectIni);
@@ -371,14 +333,13 @@ void SScriptableDefinitionsEditor::Construct(const FArguments& InArgs, const TSh
 				+ SSegmentedControl<ETab>::Slot(ETab::Context)
 				.Text_Lambda([this]()
 				{
-					const FScriptableContainer* Current = GetContainer();
-					return FText::Format(LOCTEXT("ContextTab", "Context ({0})"), Current ? Current->ContextDefinitions.Num() : 0);
+					return FText::Format(LOCTEXT("ContextTab", "Context ({0})"), Source->GetContext().Num());
 				})
 				+ SSegmentedControl<ETab>::Slot(ETab::Locals)
 				.Text_Lambda([this]()
 				{
-					const FScriptableContainer* Current = GetContainer();
-					return FText::Format(LOCTEXT("LocalsTab", "Locals ({0})"), Current ? Current->LocalsDefinitions.Num() : 0);
+					const TArray<FKzNamedVariant>* Locals = Source->GetLocals();
+					return FText::Format(LOCTEXT("LocalsTab", "Locals ({0})"), Locals ? Locals->Num() : 0);
 				})
 			]
 			+ SVerticalBox::Slot()
@@ -465,13 +426,11 @@ void SScriptableDefinitionsEditor::Tick(const FGeometry& AllottedGeometry, const
 {
 	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
 
-	// An owner gone, as a Blueprint compile reinstancing it, takes the container's memory with it.
-	if (!GetContainer())
+	// An owner gone, as a Blueprint compile reinstancing it, takes the edited memory with it.
+	const TSharedPtr<SWindow> Window = OwnWindow.Pin();
+	if (Window.IsValid() && !Source->IsValid())
 	{
-		if (const TSharedPtr<SWindow> Window = FSlateApplication::Get().FindWidgetWindow(AsShared()))
-		{
-			Window->RequestDestroyWindow();
-		}
+		Window->RequestDestroyWindow();
 	}
 }
 
@@ -482,54 +441,39 @@ void SScriptableDefinitionsEditor::SetTab(ETab InTab)
 	Regenerate();
 }
 
-FScriptableContainer* SScriptableDefinitionsEditor::GetContainer() const
-{
-	for (const TWeakObjectPtr<UObject>& Owner : Owners)
-	{
-		if (!Owner.IsValid())
-		{
-			return nullptr;
-		}
-	}
-	return Owners.IsEmpty() ? nullptr : Container;
-}
-
 FKzNamedVariant* SScriptableDefinitionsEditor::GetLocal(const FRow& Row) const
 {
-	FScriptableContainer* Current = GetContainer();
-	return Current && Current->LocalsDefinitions.IsValidIndex(Row.LocalIndex) ? &Current->LocalsDefinitions[Row.LocalIndex] : nullptr;
+	TArray<FKzNamedVariant>* Locals = Source->GetLocals();
+	return Locals && Locals->IsValidIndex(Row.LocalIndex) ? &(*Locals)[Row.LocalIndex] : nullptr;
 }
 
-const FKzParamDef* SScriptableDefinitionsEditor::FindContext(FName Name) const
+TOptional<FKzParamDef> SScriptableDefinitionsEditor::FindContext(FName Name) const
 {
-	if (const FScriptableContainer* Current = GetContainer())
+	for (const FKzParamDef& Def : Source->GetContext())
 	{
-		for (const FKzParamDef& Def : Current->ContextDefinitions)
+		if (Def.Name == Name)
 		{
-			if (Def.Name == Name)
-			{
-				return &Def;
-			}
+			return Def;
 		}
 	}
-	return nullptr;
+	return {};
 }
 
 void SScriptableDefinitionsEditor::Regenerate()
 {
 	Rows.Reset();
-	if (const FScriptableContainer* Current = GetContainer())
+	if (Source->IsValid())
 	{
 		if (Tab == ETab::Locals)
 		{
-			for (int32 Index = 0; Index < Current->LocalsDefinitions.Num(); ++Index)
+			for (int32 Index = 0; Index < Source->GetLocals()->Num(); ++Index)
 			{
 				Rows.Add(MakeLocalRow(Index));
 			}
 		}
 		else
 		{
-			for (const FKzParamDef& Def : Current->ContextDefinitions)
+			for (const FKzParamDef& Def : Source->GetContext())
 			{
 				const TSharedPtr<FRow> Row = MakeShared<FRow>();
 				Row->bEntry = true;
@@ -551,7 +495,7 @@ TSharedPtr<SScriptableDefinitionsEditor::FRow> SScriptableDefinitionsEditor::Mak
 	Row->bEntry = true;
 	Row->LocalIndex = Index;
 
-	const FKzVariant& Value = Container->LocalsDefinitions[Index].GetValue();
+	const FKzVariant& Value = (*Source->GetLocals())[Index].GetValue();
 	if (!Value.IsValid())
 	{
 		return Row;
@@ -563,10 +507,7 @@ TSharedPtr<SScriptableDefinitionsEditor::FRow> SScriptableDefinitionsEditor::Mak
 	Row->Generator = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor").CreatePropertyRowGenerator(Args);
 
 	const TSharedPtr<FStructOnScope> ValueStruct = MakeShared<FStructOnScope>(Value.GetBagStruct(), Value.GetBagMemory());
-	if (const UObject* Owner = Owners[0].Get())
-	{
-		ValueStruct->SetPackage(Owner->GetPackage());
-	}
+	ValueStruct->SetPackage(Source->GetPackage());
 	Row->Generator->SetStructure(ValueStruct);
 
 	Row->Node = ScriptableDefinitionsEditor::FindPropertyNode(Row->Generator->GetRootTreeNodes());
@@ -645,7 +586,7 @@ TSharedRef<SWidget> SScriptableDefinitionsEditor::MakeCell(const TSharedPtr<FRow
 					{
 						return Local->GetValue().GetType();
 					}
-					const FKzParamDef* Def = FindContext(Row->ContextName);
+					const TOptional<FKzParamDef> Def = FindContext(Row->ContextName);
 					return Def ? Def->Type.ValueType : EPropertyBagPropertyType::None;
 				})
 				.ValueTypeObject_Lambda([this, Row]() -> const UObject*
@@ -654,12 +595,12 @@ TSharedRef<SWidget> SScriptableDefinitionsEditor::MakeCell(const TSharedPtr<FRow
 					{
 						return Local->GetValue().GetTypeObject();
 					}
-					const FKzParamDef* Def = FindContext(Row->ContextName);
+					const TOptional<FKzParamDef> Def = FindContext(Row->ContextName);
 					return Def ? Def->Type.ValueTypeObject.Get() : nullptr;
 				})
 				.ContainerType_Lambda([this, Row]()
 				{
-					const FKzParamDef* Def = Tab == ETab::Context ? FindContext(Row->ContextName) : nullptr;
+					const TOptional<FKzParamDef> Def = Tab == ETab::Context ? FindContext(Row->ContextName) : TOptional<FKzParamDef>();
 					return Def ? Def->Type.ContainerType : EPropertyBagContainerType::None;
 				})
 				.OnTypeChanged_Lambda([this, Row](EPropertyBagPropertyType NewType, const UObject* NewTypeObject, EPropertyBagContainerType NewContainerType)
@@ -682,8 +623,8 @@ TSharedRef<SWidget> SScriptableDefinitionsEditor::MakeCell(const TSharedPtr<FRow
 	if (Column == UsesColumn)
 	{
 		return SNew(STextBlock)
-			.Text_Lambda([this, Row]() { return FText::AsNumber(CountUses(Row)); })
-			.ColorAndOpacity_Lambda([this, Row]() { return CountUses(Row) > 0 ? FSlateColor::UseForeground() : FSlateColor::UseSubduedForeground(); });
+			.Text_Lambda([this, Row]() { return FText::AsNumber(Source->CountReferences(Tab, GetRowName(Row))); })
+			.ColorAndOpacity_Lambda([this, Row]() { return Source->CountReferences(Tab, GetRowName(Row)) > 0 ? FSlateColor::UseForeground() : FSlateColor::UseSubduedForeground(); });
 	}
 
 	if (Column == ActionsColumn)
@@ -708,83 +649,27 @@ TSharedRef<SWidget> SScriptableDefinitionsEditor::MakeCell(const TSharedPtr<FRow
 	return SNullWidget::NullWidget;
 }
 
-void SScriptableDefinitionsEditor::ApplyChange(const FText& Description, TFunctionRef<void(FScriptableContainer&)> Edit)
+void SScriptableDefinitionsEditor::ApplyChange(const FText& Description, TFunctionRef<void()> Edit)
 {
-	FScriptableContainer* Current = GetContainer();
-	if (!Current)
+	if (!Source->IsValid())
 	{
 		return;
 	}
 
 	{
 		const FScopedTransaction Transaction(Description);
-		BeginChange();
-		Edit(*Current);
-		EndChange();
+		Source->BeginChange(Tab);
+		Edit();
+		Source->EndChange(Tab);
 	}
 	Regenerate();
 }
 
-void SScriptableDefinitionsEditor::BeginChange()
+void SScriptableDefinitionsEditor::EditContext(TFunctionRef<void(TArray<FKzParamDef>&)> Edit)
 {
-	if (ContainerHandle.IsValid() && ContainerHandle->IsValidHandle())
-	{
-		ContainerHandle->NotifyPreChange();
-		return;
-	}
-
-	// The details panel the window came from rebuilt: the owners themselves are snapshot.
-	for (const TWeakObjectPtr<UObject>& Owner : Owners)
-	{
-		if (UObject* Object = Owner.Get())
-		{
-			Object->Modify();
-		}
-	}
-}
-
-void SScriptableDefinitionsEditor::EndChange()
-{
-	FScriptableContainer* Current = GetContainer();
-	if (!Current)
-	{
-		return;
-	}
-
-	Current->ConstructContext();
-	Current->ConstructLocals();
-
-	if (ContainerHandle.IsValid() && ContainerHandle->IsValidHandle())
-	{
-		ContainerHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
-	}
-	else
-	{
-		for (const TWeakObjectPtr<UObject>& Owner : Owners)
-		{
-			if (UObject* Object = Owner.Get())
-			{
-				Object->PostEditChange();
-			}
-		}
-	}
-
-	// The owners hear of the change, but not the tasks nested in them, whose auto-bindings read the definitions.
-	for (const TWeakObjectPtr<UObject>& Owner : Owners)
-	{
-		if (UObject* Object = Owner.Get())
-		{
-			TArray<UObject*> NestedObjects;
-			GetObjectsWithOuter(Object, NestedObjects, /*bIncludeNestedObjects=*/true);
-			for (UObject* Nested : NestedObjects)
-			{
-				if (UScriptableObject* Scriptable = Cast<UScriptableObject>(Nested))
-				{
-					Scriptable->BakeAutoBindings();
-				}
-			}
-		}
-	}
+	TArray<FKzParamDef> Entries = Source->GetContext();
+	Edit(Entries);
+	Source->SetContext(Entries);
 }
 
 void SScriptableDefinitionsEditor::Rename(const TSharedPtr<FRow>& Row, FName NewName)
@@ -795,68 +680,75 @@ void SScriptableDefinitionsEditor::Rename(const TSharedPtr<FRow>& Row, FName New
 		return;
 	}
 
-	ApplyChange(LOCTEXT("RenameDefinition", "Rename Definition"), [this, Row, OldName, NewName](FScriptableContainer& Current)
+	ApplyChange(LOCTEXT("RenameDefinition", "Rename Definition"), [this, Row, OldName, NewName]()
 	{
-		const bool bLocals = Tab == ETab::Locals;
-		if (bLocals)
+		if (Tab == ETab::Locals)
 		{
-			Current.LocalsDefinitions[Row->LocalIndex].SetName(NewName);
+			GetLocal(*Row)->SetName(NewName);
 		}
 		else
 		{
-			ScriptableDefinitionsEditor::EditContext(Current, OldName, [NewName](FKzParamDef& Def) { Def.Name = NewName; });
+			EditContext([OldName, NewName](TArray<FKzParamDef>& Entries)
+			{
+				if (FKzParamDef* Def = Entries.FindByPredicate([OldName](const FKzParamDef& Entry) { return Entry.Name == OldName; }))
+				{
+					Def->Name = NewName;
+				}
+			});
 		}
 
 		// Bindings and the tasks naming a Local follow the rename.
-		FScriptableContainerCustomization::RedirectBindingsInContainer(&Current, ContainerStruct, GetSourceID(), OldName, NewName);
+		Source->RedirectReferences(Tab, OldName, NewName);
 	});
 }
 
 void SScriptableDefinitionsEditor::SetType(const TSharedPtr<FRow>& Row, EPropertyBagPropertyType Type, const UObject* TypeObject, EPropertyBagContainerType ContainerType)
 {
-	ApplyChange(LOCTEXT("ChangeDefinitionType", "Change Definition Type"), [this, Row, Type, TypeObject, ContainerType](FScriptableContainer& Current)
+	ApplyChange(LOCTEXT("ChangeDefinitionType", "Change Definition Type"), [this, Row, Type, TypeObject, ContainerType]()
 	{
 		if (Tab == ETab::Locals)
 		{
-			if (Current.LocalsDefinitions.IsValidIndex(Row->LocalIndex))
+			if (FKzNamedVariant* Local = GetLocal(*Row))
 			{
-				Current.LocalsDefinitions[Row->LocalIndex].GetValue().SetType(Type, TypeObject);
+				Local->GetValue().SetType(Type, TypeObject);
 			}
+			return;
 		}
-		else
+
+		EditContext([Name = Row->ContextName, Type, TypeObject, ContainerType](TArray<FKzParamDef>& Entries)
 		{
-			ScriptableDefinitionsEditor::EditContext(Current, Row->ContextName, [Type, TypeObject, ContainerType](FKzParamDef& Def) { Def.Type = FKzTypeDef(ContainerType, Type, TypeObject); });
-		}
+			if (FKzParamDef* Def = Entries.FindByPredicate([Name](const FKzParamDef& Entry) { return Entry.Name == Name; }))
+			{
+				Def->Type = FKzTypeDef(ContainerType, Type, TypeObject);
+			}
+		});
 	});
 }
 
 void SScriptableDefinitionsEditor::Delete(const TSharedPtr<FRow>& Row)
 {
-	const int32 Uses = CountUses(Row);
+	const int32 Uses = Source->CountReferences(Tab, GetRowName(Row));
 	if (Uses > 0 && FMessageDialog::Open(EAppMsgType::YesNo, FText::Format(LOCTEXT("DeleteInUse", "{0} is read by {1} {1}|plural(one=binding or task,other=bindings or tasks), which will stop working. Delete it anyway?"), GetEntryName(Row), Uses)) != EAppReturnType::Yes)
 	{
 		return;
 	}
 
-	ApplyChange(LOCTEXT("DeleteDefinition", "Delete Definition"), [this, Row](FScriptableContainer& Current)
+	ApplyChange(LOCTEXT("DeleteDefinition", "Delete Definition"), [this, Row]()
 	{
 		if (Tab == ETab::Locals)
 		{
-			if (Current.LocalsDefinitions.IsValidIndex(Row->LocalIndex))
+			TArray<FKzNamedVariant>* Locals = Source->GetLocals();
+			if (Locals->IsValidIndex(Row->LocalIndex))
 			{
-				Current.LocalsDefinitions.RemoveAt(Row->LocalIndex);
+				Locals->RemoveAt(Row->LocalIndex);
 			}
 			return;
 		}
 
-		for (auto It = Current.ContextDefinitions.CreateIterator(); It; ++It)
+		EditContext([Name = Row->ContextName](TArray<FKzParamDef>& Entries)
 		{
-			if (It->Name == Row->ContextName)
-			{
-				It.RemoveCurrent();
-				return;
-			}
-		}
+			Entries.RemoveAll([Name](const FKzParamDef& Entry) { return Entry.Name == Name; });
+		});
 	});
 }
 
@@ -869,11 +761,6 @@ FName SScriptableDefinitionsEditor::GetRowName(const TSharedPtr<FRow>& Row) cons
 {
 	const FKzNamedVariant* Local = Tab == ETab::Locals ? GetLocal(*Row) : nullptr;
 	return Local ? Local->GetName() : Row->ContextName;
-}
-
-const FGuid& SScriptableDefinitionsEditor::GetSourceID() const
-{
-	return Tab == ETab::Locals ? ScriptableBindingSources::LocalsStructID : ScriptableBindingSources::ContextStructID;
 }
 
 FText SScriptableDefinitionsEditor::GetNameError(const TSharedPtr<FRow>& Row, FName Name) const
@@ -889,36 +776,30 @@ FText SScriptableDefinitionsEditor::GetNameError(const TSharedPtr<FRow>& Row, FN
 
 	// The row's own name is in the list once.
 	int32 Others = Name == GetRowName(Row) ? -1 : 0;
-	if (const FScriptableContainer* Current = GetContainer())
+	if (Tab == ETab::Locals)
 	{
-		if (Tab == ETab::Locals)
+		if (const TArray<FKzNamedVariant>* Locals = Source->GetLocals())
 		{
-			for (const FKzNamedVariant& Local : Current->LocalsDefinitions)
+			for (const FKzNamedVariant& Local : *Locals)
 			{
 				Others += Local.GetName() == Name ? 1 : 0;
 			}
 		}
-		else
+	}
+	else
+	{
+		for (const FKzParamDef& Def : Source->GetContext())
 		{
-			for (const FKzParamDef& Def : Current->ContextDefinitions)
-			{
-				Others += Def.Name == Name ? 1 : 0;
-			}
+			Others += Def.Name == Name ? 1 : 0;
 		}
 	}
 	return Others > 0 ? FText::Format(LOCTEXT("DuplicateName", "Another entry is already named {0}."), FText::FromName(Name)) : FText::GetEmpty();
 }
 
-int32 SScriptableDefinitionsEditor::CountUses(const TSharedPtr<FRow>& Row) const
+void SScriptableDefinitionsEditor::MoveEntry(const TSharedPtr<FRow>& SourceRow, const TSharedPtr<FRow>& TargetRow, bool bBelow)
 {
-	FScriptableContainer* Current = GetContainer();
-	return Current ? FScriptableContainerCustomization::CountReferencesInContainer(Current, ContainerStruct, GetSourceID(), GetRowName(Row)) : 0;
-}
-
-void SScriptableDefinitionsEditor::MoveEntry(const TSharedPtr<FRow>& Source, const TSharedPtr<FRow>& Target, bool bBelow)
-{
-	const int32 From = Rows.IndexOfByKey(Source);
-	const int32 To = Rows.IndexOfByKey(Target);
+	const int32 From = Rows.IndexOfByKey(SourceRow);
+	const int32 To = Rows.IndexOfByKey(TargetRow);
 	if (From == INDEX_NONE || To == INDEX_NONE)
 	{
 		return;
@@ -934,27 +815,25 @@ void SScriptableDefinitionsEditor::MoveEntry(const TSharedPtr<FRow>& Source, con
 		return;
 	}
 
-	ApplyChange(LOCTEXT("ReorderDefinitions", "Reorder Definitions"), [this, From, Insert](FScriptableContainer& Current)
+	auto Move = [From, Insert](auto& Entries)
+	{
+		if (Entries.IsValidIndex(From))
+		{
+			auto Moved = MoveTemp(Entries[From]);
+			Entries.RemoveAt(From);
+			Entries.Insert(MoveTemp(Moved), FMath::Clamp(Insert, 0, Entries.Num()));
+		}
+	};
+
+	ApplyChange(LOCTEXT("ReorderDefinitions", "Reorder Definitions"), [this, &Move]()
 	{
 		if (Tab == ETab::Locals)
 		{
-			if (Current.LocalsDefinitions.IsValidIndex(From))
-			{
-				FKzNamedVariant Moved = MoveTemp(Current.LocalsDefinitions[From]);
-				Current.LocalsDefinitions.RemoveAt(From);
-				Current.LocalsDefinitions.Insert(MoveTemp(Moved), FMath::Clamp(Insert, 0, Current.LocalsDefinitions.Num()));
-			}
-			return;
+			Move(*Source->GetLocals());
 		}
-
-		TArray<FKzParamDef> Ordered = Current.ContextDefinitions.Array();
-		if (Ordered.IsValidIndex(From))
+		else
 		{
-			const FKzParamDef Moved = Ordered[From];
-			Ordered.RemoveAt(From);
-			Ordered.Insert(Moved, FMath::Clamp(Insert, 0, Ordered.Num()));
-			Current.ContextDefinitions.Empty(Ordered.Num());
-			Current.ContextDefinitions.Append(Ordered);
+			EditContext([&Move](TArray<FKzParamDef>& Entries) { Move(Entries); });
 		}
 	});
 }
@@ -962,38 +841,28 @@ void SScriptableDefinitionsEditor::MoveEntry(const TSharedPtr<FRow>& Source, con
 void SScriptableDefinitionsEditor::AddEntry()
 {
 	const FText Description = Tab == ETab::Locals ? LOCTEXT("AddLocalTransaction", "Add Local") : LOCTEXT("AddContextTransaction", "Add Context Entry");
-	ApplyChange(Description, [this](FScriptableContainer& Current)
+	ApplyChange(Description, [this]()
 	{
 		if (Tab == ETab::Locals)
 		{
-			const FName Name = ScriptableDefinitionsEditor::MakeUniqueName(TEXT("NewLocal"), [&Current](FName Candidate)
+			TArray<FKzNamedVariant>& Locals = *Source->GetLocals();
+			const FName Name = ScriptableDefinitionsEditor::MakeUniqueName(TEXT("NewLocal"), [&Locals](FName Candidate)
 			{
-				return Current.LocalsDefinitions.ContainsByPredicate([Candidate](const FKzNamedVariant& Local) { return Local.GetName() == Candidate; });
+				return Locals.ContainsByPredicate([Candidate](const FKzNamedVariant& Local) { return Local.GetName() == Candidate; });
 			});
-			Current.LocalsDefinitions.Add(FKzNamedVariant(Name, FKzVariant::Make<bool>(false)));
+			Locals.Add(FKzNamedVariant(Name, FKzVariant::Make<bool>(false)));
 			return;
 		}
 
-		const FName Name = ScriptableDefinitionsEditor::MakeUniqueName(TEXT("NewParameter"), [&Current](FName Candidate)
+		EditContext([](TArray<FKzParamDef>& Entries)
 		{
-			for (const FKzParamDef& Def : Current.ContextDefinitions)
+			const FName Name = ScriptableDefinitionsEditor::MakeUniqueName(TEXT("NewParameter"), [&Entries](FName Candidate)
 			{
-				if (Def.Name == Candidate)
-				{
-					return true;
-				}
-			}
-			return false;
+				return Entries.ContainsByPredicate([Candidate](const FKzParamDef& Entry) { return Entry.Name == Candidate; });
+			});
+			Entries.Add(FKzParamDef(Name, EPropertyBagPropertyType::Bool));
 		});
-		Current.ContextDefinitions.Add(FKzParamDef(Name, EPropertyBagPropertyType::Bool));
 	});
-}
-
-FText SScriptableDefinitionsEditor::GetTitle() const
-{
-	const UObject* Owner = Owners.IsEmpty() ? nullptr : Owners[0].Get();
-	const FText AssetName = Owner ? FText::FromString(FPackageName::GetShortName(Owner->GetPackage()->GetName())) : FText::GetEmpty();
-	return FText::Format(LOCTEXT("Title", "{0} {1}: Context & Locals"), AssetName, ContainerHandle->GetPropertyDisplayName());
 }
 
 TSharedRef<ITableRow> SScriptableDefinitionsEditor::OnGenerateRow(TSharedPtr<FRow> Row, const TSharedRef<STableViewBase>& OwnerTable)
@@ -1018,7 +887,7 @@ void SScriptableDefinitionsEditor::NotifyPreChange(FProperty* PropertyAboutToCha
 	{
 		ValueTransaction = MakeUnique<FScopedTransaction>(LOCTEXT("EditInitialValue", "Edit Initial Value"));
 	}
-	BeginChange();
+	Source->BeginChange(ETab::Locals);
 }
 
 void SScriptableDefinitionsEditor::NotifyPostChange(const FPropertyChangedEvent& PropertyChangedEvent, FProperty* PropertyThatChanged)
@@ -1029,14 +898,14 @@ void SScriptableDefinitionsEditor::NotifyPostChange(const FPropertyChangedEvent&
 		return;
 	}
 
-	EndChange();
+	Source->EndChange(ETab::Locals);
 	bValueChanging = false;
 	ValueTransaction.Reset();
 }
 
 void SScriptableDefinitionsEditor::PostUndo(bool bSuccess)
 {
-	// Undo rebuilds the container's values, so the rows' widgets point at memory that is gone.
+	// Undo rebuilds the edited values, so the rows' widgets point at memory that is gone.
 	Regenerate();
 }
 
@@ -1044,5 +913,4 @@ void SScriptableDefinitionsEditor::PostRedo(bool bSuccess)
 {
 	Regenerate();
 }
-
 #undef LOCTEXT_NAMESPACE
