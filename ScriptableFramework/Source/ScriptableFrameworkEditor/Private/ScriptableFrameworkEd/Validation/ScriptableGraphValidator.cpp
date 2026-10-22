@@ -607,7 +607,7 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 				const FScopedTransaction Tx(LOCTEXT("QF_RemoveContextEntry", "Remove Context entry"));
 				G->Modify();
 				G->Context.RemoveAt(IndexToRemove);
-				if (FProperty* Prop = FindFProperty<FProperty>(UScriptableObjectAsset::StaticClass(), GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context)))
+				if (FProperty* Prop = FindFProperty<FProperty>(UScriptableGraph::StaticClass(), GET_MEMBER_NAME_CHECKED(UScriptableGraph, Context)))
 				{
 					FPropertyChangedEvent Event(Prop, EPropertyChangeType::ArrayRemove);
 					G->PostEditChangeProperty(Event);

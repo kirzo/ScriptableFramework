@@ -7,16 +7,18 @@
 #include "Core/KzParamDef.h"
 
 class IPropertyHandle;
+class UScriptableGraph;
 class UScriptableObject;
 struct FScriptableContainer;
 
 enum class EScriptableDefinitionsTab : uint8
 {
 	Context,
-	Locals
+	Locals,
+	Outputs
 };
 
-/** What the definitions editor edits: the Context and Locals of a container or a graph, the objects reading them, and how their owners hear of a change. */
+/** What the definitions editor edits: the Context and Locals of a container or a graph and a graph's Outputs, what uses them, and how their owners hear of a change. Renames are only redirected here. */
 class FScriptableDefinitionsSource
 {
 public:
@@ -42,18 +44,24 @@ public:
 
 	virtual TArray<FKzNamedVariant>* GetLocals() const = 0;
 
+	/** The graph's completion outputs; none for a container, which then shows no Outputs tab. */
+	virtual TArray<FName>* GetOutputs() const { return nullptr; }
+
+	/** Names the tab's entries can't take, being built in. */
+	virtual TArray<FName> GetReservedNames(ETab Tab) const { return {}; }
+
 	/** Snapshots the owners for undo before a change of the tab, and lets them and the objects reading it catch up after it. */
 	virtual void BeginChange(ETab Tab) = 0;
 	virtual void EndChange(ETab Tab) = 0;
 
-	/** Visits each scriptable object that sees the tab's entries. */
+	/** Visits each scriptable object that sees the tab's Context or Locals. */
 	virtual void ForEachObjectInScope(ETab Tab, TFunctionRef<void(UScriptableObject&)> Visit) const = 0;
 
-	/** Rewrites the bindings and the task fields naming the entry, from OldName to NewName; only inside a change. */
-	void RedirectReferences(ETab Tab, FName OldName, FName NewName);
+	/** Rewrites what names the entry, from OldName to NewName; only inside a change. For Context and Locals, the bindings and task fields reading it. */
+	virtual void RedirectReferences(ETab Tab, FName OldName, FName NewName);
 
-	/** Bindings and task fields reading the entry. */
-	int32 CountReferences(ETab Tab, FName Name) const;
+	/** How many places name the entry. */
+	virtual int32 CountReferences(ETab Tab, FName Name) const;
 
 	static const FGuid& GetSourceID(ETab Tab);
 
@@ -89,4 +97,31 @@ private:
 	TArray<TWeakObjectPtr<UObject>> Owners;
 	FScriptableContainer* Container = nullptr;
 	const UScriptStruct* ContainerStruct = nullptr;
+};
+
+/** A graph asset, whose nodes and their tasks all see its Context and Locals. */
+class FScriptableGraphDefinitionsSource : public FScriptableDefinitionsSource
+{
+public:
+	explicit FScriptableGraphDefinitionsSource(UScriptableGraph* InGraph);
+
+	virtual bool IsValid() const override { return Graph.IsValid(); }
+	virtual const void* GetKey() const override { return Graph.Get(); }
+	virtual FText GetTitle() const override;
+	virtual UPackage* GetPackage() const override;
+	virtual TArray<FKzParamDef> GetContext() const override;
+	virtual void SetContext(const TArray<FKzParamDef>& Entries) override;
+	virtual TArray<FKzNamedVariant>* GetLocals() const override;
+	virtual TArray<FName>* GetOutputs() const override;
+	virtual TArray<FName> GetReservedNames(ETab Tab) const override;
+	virtual void BeginChange(ETab Tab) override;
+	virtual void EndChange(ETab Tab) override;
+	virtual void ForEachObjectInScope(ETab Tab, TFunctionRef<void(UScriptableObject&)> Visit) const override;
+
+	/** Outputs are named by Finish nodes and by the wires leaving the Exit node's pins. */
+	virtual void RedirectReferences(ETab Tab, FName OldName, FName NewName) override;
+	virtual int32 CountReferences(ETab Tab, FName Name) const override;
+
+private:
+	TWeakObjectPtr<UScriptableGraph> Graph;
 };

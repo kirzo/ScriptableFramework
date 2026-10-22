@@ -7,6 +7,7 @@
 #include "ScriptableNodes/ScriptableGraphConnection.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "Core/KzNamedVariant.h"
+#include "Core/KzParamDef.h"
 #include "StructUtils/PropertyBag.h"
 #include "ScriptableGraph.generated.h"
 
@@ -44,6 +45,10 @@ public:
 	/** Persistent ID of the Entry node. Set automatically on creation and validated/repaired on load. */
 	UPROPERTY()
 	FGuid EntryNodeID;
+
+	/** What whoever runs the graph passes in. */
+	UPROPERTY(EditAnywhere, Category = "Context")
+	TArray<FKzParamDef> Context;
 
 	/** Per-instance mutable state. Graph-scoped variables seeded with each entry's default value at Launch. */
 	UPROPERTY(EditAnywhere, Category = "Local Variables")
@@ -84,10 +89,6 @@ public:
 		if (IsContextBagOutOfSync()) { RebuildContextBag(); }
 		return &ContextBag;
 	}
-
-#if WITH_EDITOR
-	virtual FName GetContainerName() const override { return NAME_None; }
-#endif
 	//~ End of UScriptableObjectAsset interface
 
 #if WITH_EDITOR
@@ -123,35 +124,7 @@ private:
 	/** Drops connections whose endpoint node or pin no longer exists; marks the package dirty if any were removed. Called from PostLoad. */
 	void PruneOrphanConnections();
 
-#if WITH_EDITORONLY_DATA
-	/** Snapshot of Context entry names taken at the last PostLoad / PostEditChange. Diffed on every edit to detect single-entry renames so binding paths can be redirected. Non-transient so transactions restore it on undo (otherwise rename then Ctrl-Z then rename-again would miss the redirect because the snapshot stayed at the first new name). */
-	UPROPERTY()
-	TArray<FName> PreviousContextNames;
-
-	/** Parallel snapshot of Locals entry names, same semantics as PreviousContextNames. */
-	UPROPERTY()
-	TArray<FName> PreviousLocalsNames;
-#endif
-
 #if WITH_EDITOR
-	/** Mirrors PreviousContextNames to the current Context. */
-	void SnapshotContextNames();
-
-	/** Mirrors PreviousLocalsNames to the current Locals. */
-	void SnapshotLocalsNames();
-
-	/** Diffs PreviousContextNames against current Context; if exactly one entry's Name changed, redirects every Context binding referencing the old name. */
-	void DetectAndApplyContextRename();
-
-	/** Diffs PreviousLocalsNames against current Locals; on a single rename, redirects every Locals binding referencing the old name. */
-	void DetectAndApplyLocalsRename();
-
-	/** Walks every binding holder owned by this graph and rewrites the first segment of paths whose SourceID matches ExpectedSourceID. */
-	void RedirectBindings(const FGuid& ExpectedSourceID, FName OldName, FName NewName);
-
-	/** Walks every Set Local task in this graph and rewrites VarName when it matches OldName. */
-	void RedirectSetLocalVarNames(FName OldName, FName NewName);
-
 	/** Re-bakes auto-bindings on every node/task so context edits are picked up without a save. */
 	void RebakeNodeAutoBindings();
 #endif

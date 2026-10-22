@@ -20,6 +20,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/Application/IInputProcessor.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
+#include "ScriptableFrameworkEd/Customization/Widgets/SScriptableDefinitionsEditor.h"
 #include "ScriptableFrameworkEd/Customization/Widgets/SScriptableTypePicker.h"
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "ScriptableNodes/ScriptableGraph.h"
@@ -49,6 +50,7 @@
 #include "Framework/Docking/TabManager.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SSplitter.h"
 #include "Widgets/Text/STextBlock.h"
 #include "ScopedTransaction.h"
 #include "UObject/Package.h"
@@ -417,6 +419,12 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 
 	if (AssetDetailsView.IsValid())
 	{
+		// Context, Locals and Outputs are edited in the table the details sit under.
+		AssetDetailsView->SetIsPropertyVisibleDelegate(FIsPropertyVisible::CreateLambda([](const FPropertyAndParent& PropertyAndParent)
+			{
+				const FName Name = PropertyAndParent.Property.GetFName();
+				return PropertyAndParent.Property.GetOwnerClass() != UScriptableGraph::StaticClass() || (Name != GET_MEMBER_NAME_CHECKED(UScriptableGraph, Context) && Name != GET_MEMBER_NAME_CHECKED(UScriptableGraph, Locals) && Name != GET_MEMBER_NAME_CHECKED(UScriptableGraph, Outputs));
+			}));
 		AssetDetailsView->SetObject(InGraph);
 	}
 
@@ -632,7 +640,19 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_AssetDetails(const FSpawnT
 	return SNew(SDockTab)
 		.Label(LOCTEXT("AssetDetailsTab", "Graph Details"))
 		[
-			AssetDetailsView.IsValid() ? AssetDetailsView.ToSharedRef() : SNullWidget::NullWidget
+			SNew(SSplitter)
+			.Orientation(Orient_Vertical)
+			+ SSplitter::Slot()
+			.Value(0.75f)
+			[
+				SNew(SScriptableDefinitionsEditor, MakeShared<FScriptableGraphDefinitionsSource>(EditedGraph.Get()))
+				.Tab(SScriptableDefinitionsEditor::ETab::Context)
+			]
+			+ SSplitter::Slot()
+			.Value(0.25f)
+			[
+				AssetDetailsView.IsValid() ? AssetDetailsView.ToSharedRef() : SNullWidget::NullWidget
+			]
 		];
 }
 

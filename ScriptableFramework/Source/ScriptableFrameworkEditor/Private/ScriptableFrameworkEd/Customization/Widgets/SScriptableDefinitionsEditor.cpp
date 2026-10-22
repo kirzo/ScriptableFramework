@@ -64,6 +64,11 @@ namespace ScriptableDefinitionsEditor
 		return nullptr;
 	}
 
+	FText ByTab(EScriptableDefinitionsTab Tab, const FText& Context, const FText& Locals, const FText& Outputs)
+	{
+		return Tab == EScriptableDefinitionsTab::Context ? Context : Tab == EScriptableDefinitionsTab::Locals ? Locals : Outputs;
+	}
+
 	FName ToName(const FText& Text)
 	{
 		return FName(*Text.ToString().TrimStartAndEnd());
@@ -300,6 +305,7 @@ void SScriptableDefinitionsEditor::Construct(const FArguments& InArgs, const TSh
 		.DefaultLabel(LOCTEXT("TypeColumn", "Type"))
 		.FillWidth_Lambda([this]() { return TypeFill; })
 		.OnWidthChanged_Lambda([this](float Fill) { TypeFill = Fill; ScriptableDefinitionsEditor::SaveFill(TEXT("TypeFill"), Fill); })
+		.ShouldGenerateWidget_Lambda([this]() { return Tab != ETab::Outputs; })
 		+ SHeaderRow::Column(ValueColumn)
 		.DefaultLabel(LOCTEXT("ValueColumn", "Initial Value"))
 		.FillWidth_Lambda([this]() { return ValueFill; })
@@ -307,7 +313,10 @@ void SScriptableDefinitionsEditor::Construct(const FArguments& InArgs, const TSh
 		.ShouldGenerateWidget_Lambda([this]() { return Tab == ETab::Locals; })
 		+ SHeaderRow::Column(UsesColumn)
 		.DefaultLabel(LOCTEXT("UsesColumn", "Uses"))
-		.DefaultTooltip(LOCTEXT("UsesColumnTooltip", "Bindings and tasks that read the entry"))
+		.DefaultTooltip_Lambda([this]()
+		{
+			return Tab == ETab::Outputs ? LOCTEXT("OutputUsesTooltip", "Finish nodes that pick the output, and wires from its Exit pin") : LOCTEXT("UsesColumnTooltip", "Bindings and tasks that read the entry");
+		})
 		.FixedWidth(48.0f)
 		.HAlignHeader(HAlign_Center)
 		.HAlignCell(HAlign_Center)
@@ -316,6 +325,7 @@ void SScriptableDefinitionsEditor::Construct(const FArguments& InArgs, const TSh
 		.DefaultLabel(FText::GetEmpty())
 		.FixedWidth(32.0f);
 
+	TSharedPtr<SSegmentedControl<ETab>> TabControl;
 	ChildSlot
 	[
 		SNew(SBorder)
@@ -327,7 +337,7 @@ void SScriptableDefinitionsEditor::Construct(const FArguments& InArgs, const TSh
 			.AutoHeight()
 			.HAlign(HAlign_Left)
 			[
-				SNew(SSegmentedControl<ETab>)
+				SAssignNew(TabControl, SSegmentedControl<ETab>)
 				.Value_Lambda([this]() { return Tab; })
 				.OnValueChanged(this, &SScriptableDefinitionsEditor::SetTab)
 				+ SSegmentedControl<ETab>::Slot(ETab::Context)
@@ -351,9 +361,10 @@ void SScriptableDefinitionsEditor::Construct(const FArguments& InArgs, const TSh
 				.ColorAndOpacity(FSlateColor::UseSubduedForeground())
 				.Text_Lambda([this]()
 				{
-					return Tab == ETab::Context
-						? LOCTEXT("ContextDescription", "What the runner passes in each time it runs this. Tasks read it through bindings; nothing here writes it.")
-						: LOCTEXT("LocalsDescription", "State each run starts with, at these values. Set Local changes it; tasks read it through bindings.");
+					return ScriptableDefinitionsEditor::ByTab(Tab,
+						LOCTEXT("ContextDescription", "What the runner passes in each time it runs this. Tasks read it through bindings; nothing here writes it."),
+						LOCTEXT("LocalsDescription", "State each run starts with, at these values. Set Local changes it; tasks read it through bindings."),
+						LOCTEXT("OutputsDescription", "Ways the graph can end besides Finished and Cancelled. A Finish node picks one; the Exit node and every node running this graph get a pin for each."));
 				})
 			]
 			+ SVerticalBox::Slot()
@@ -380,7 +391,7 @@ void SScriptableDefinitionsEditor::Construct(const FArguments& InArgs, const TSh
 						SNew(STextBlock)
 						.Visibility_Lambda([this]() { return Rows.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 						.ColorAndOpacity(FSlateColor::UseSubduedForeground())
-						.Text_Lambda([this]() { return Tab == ETab::Context ? LOCTEXT("NoContext", "No context entries yet.") : LOCTEXT("NoLocals", "No locals yet."); })
+						.Text_Lambda([this]() { return ScriptableDefinitionsEditor::ByTab(Tab, LOCTEXT("NoContext", "No context entries yet."), LOCTEXT("NoLocals", "No locals yet."), LOCTEXT("NoOutputs", "No outputs yet.")); })
 					]
 				]
 			]
@@ -412,12 +423,22 @@ void SScriptableDefinitionsEditor::Construct(const FArguments& InArgs, const TSh
 					.VAlign(VAlign_Center)
 					[
 						SNew(STextBlock)
-						.Text_Lambda([this]() { return Tab == ETab::Context ? LOCTEXT("AddContext", "Add Context Entry") : LOCTEXT("AddLocal", "Add Local"); })
+						.Text_Lambda([this]() { return ScriptableDefinitionsEditor::ByTab(Tab, LOCTEXT("AddContext", "Add Context Entry"), LOCTEXT("AddLocal", "Add Local"), LOCTEXT("AddOutput", "Add Output")); })
 					]
 				]
 			]
 		]
 	];
+
+	if (Source->GetOutputs())
+	{
+		TabControl->AddSlot(ETab::Outputs)
+			.Text_Lambda([this]()
+			{
+				const TArray<FName>* Outputs = Source->GetOutputs();
+				return FText::Format(LOCTEXT("OutputsTab", "Outputs ({0})"), Outputs ? Outputs->Num() : 0);
+			});
+	}
 
 	Regenerate();
 }
@@ -444,7 +465,13 @@ void SScriptableDefinitionsEditor::SetTab(ETab InTab)
 FKzNamedVariant* SScriptableDefinitionsEditor::GetLocal(const FRow& Row) const
 {
 	TArray<FKzNamedVariant>* Locals = Source->GetLocals();
-	return Locals && Locals->IsValidIndex(Row.LocalIndex) ? &(*Locals)[Row.LocalIndex] : nullptr;
+	return Locals && Locals->IsValidIndex(Row.Index) ? &(*Locals)[Row.Index] : nullptr;
+}
+
+FName* SScriptableDefinitionsEditor::GetOutput(const FRow& Row) const
+{
+	TArray<FName>* Outputs = Source->GetOutputs();
+	return Outputs && Outputs->IsValidIndex(Row.Index) ? &(*Outputs)[Row.Index] : nullptr;
 }
 
 TOptional<FKzParamDef> SScriptableDefinitionsEditor::FindContext(FName Name) const
@@ -471,6 +498,17 @@ void SScriptableDefinitionsEditor::Regenerate()
 				Rows.Add(MakeLocalRow(Index));
 			}
 		}
+		else if (Tab == ETab::Outputs)
+		{
+			const TArray<FName>* Outputs = Source->GetOutputs();
+			for (int32 Index = 0; Outputs && Index < Outputs->Num(); ++Index)
+			{
+				const TSharedPtr<FRow> Row = MakeShared<FRow>();
+				Row->bEntry = true;
+				Row->Index = Index;
+				Rows.Add(Row);
+			}
+		}
 		else
 		{
 			for (const FKzParamDef& Def : Source->GetContext())
@@ -493,7 +531,7 @@ TSharedPtr<SScriptableDefinitionsEditor::FRow> SScriptableDefinitionsEditor::Mak
 {
 	const TSharedPtr<FRow> Row = MakeShared<FRow>();
 	Row->bEntry = true;
-	Row->LocalIndex = Index;
+	Row->Index = Index;
 
 	const FKzVariant& Value = (*Source->GetLocals())[Index].GetValue();
 	if (!Value.IsValid())
@@ -675,7 +713,7 @@ void SScriptableDefinitionsEditor::EditContext(TFunctionRef<void(TArray<FKzParam
 void SScriptableDefinitionsEditor::Rename(const TSharedPtr<FRow>& Row, FName NewName)
 {
 	const FName OldName = GetRowName(Row);
-	if (NewName == OldName || (Tab == ETab::Locals && !GetLocal(*Row)) || !GetNameError(Row, NewName).IsEmpty())
+	if (NewName == OldName || (Tab == ETab::Locals && !GetLocal(*Row)) || (Tab == ETab::Outputs && !GetOutput(*Row)) || !GetNameError(Row, NewName).IsEmpty())
 	{
 		return;
 	}
@@ -685,6 +723,10 @@ void SScriptableDefinitionsEditor::Rename(const TSharedPtr<FRow>& Row, FName New
 		if (Tab == ETab::Locals)
 		{
 			GetLocal(*Row)->SetName(NewName);
+		}
+		else if (Tab == ETab::Outputs)
+		{
+			*GetOutput(*Row) = NewName;
 		}
 		else
 		{
@@ -697,7 +739,6 @@ void SScriptableDefinitionsEditor::Rename(const TSharedPtr<FRow>& Row, FName New
 			});
 		}
 
-		// Bindings and the tasks naming a Local follow the rename.
 		Source->RedirectReferences(Tab, OldName, NewName);
 	});
 }
@@ -728,7 +769,7 @@ void SScriptableDefinitionsEditor::SetType(const TSharedPtr<FRow>& Row, EPropert
 void SScriptableDefinitionsEditor::Delete(const TSharedPtr<FRow>& Row)
 {
 	const int32 Uses = Source->CountReferences(Tab, GetRowName(Row));
-	if (Uses > 0 && FMessageDialog::Open(EAppMsgType::YesNo, FText::Format(LOCTEXT("DeleteInUse", "{0} is read by {1} {1}|plural(one=binding or task,other=bindings or tasks), which will stop working. Delete it anyway?"), GetEntryName(Row), Uses)) != EAppReturnType::Yes)
+	if (Uses > 0 && FMessageDialog::Open(EAppMsgType::YesNo, FText::Format(LOCTEXT("DeleteInUse", "{0} is used in {1} {1}|plural(one=place,other=places), which will stop working. Delete it anyway?"), GetEntryName(Row), Uses)) != EAppReturnType::Yes)
 	{
 		return;
 	}
@@ -738,9 +779,18 @@ void SScriptableDefinitionsEditor::Delete(const TSharedPtr<FRow>& Row)
 		if (Tab == ETab::Locals)
 		{
 			TArray<FKzNamedVariant>* Locals = Source->GetLocals();
-			if (Locals->IsValidIndex(Row->LocalIndex))
+			if (Locals->IsValidIndex(Row->Index))
 			{
-				Locals->RemoveAt(Row->LocalIndex);
+				Locals->RemoveAt(Row->Index);
+			}
+			return;
+		}
+		if (Tab == ETab::Outputs)
+		{
+			TArray<FName>* Outputs = Source->GetOutputs();
+			if (Outputs->IsValidIndex(Row->Index))
+			{
+				Outputs->RemoveAt(Row->Index);
 			}
 			return;
 		}
@@ -759,8 +809,17 @@ FText SScriptableDefinitionsEditor::GetEntryName(const TSharedPtr<FRow>& Row) co
 
 FName SScriptableDefinitionsEditor::GetRowName(const TSharedPtr<FRow>& Row) const
 {
-	const FKzNamedVariant* Local = Tab == ETab::Locals ? GetLocal(*Row) : nullptr;
-	return Local ? Local->GetName() : Row->ContextName;
+	if (Tab == ETab::Context)
+	{
+		return Row->ContextName;
+	}
+	if (Tab == ETab::Outputs)
+	{
+		const FName* Output = GetOutput(*Row);
+		return Output ? *Output : NAME_None;
+	}
+	const FKzNamedVariant* Local = GetLocal(*Row);
+	return Local ? Local->GetName() : NAME_None;
 }
 
 FText SScriptableDefinitionsEditor::GetNameError(const TSharedPtr<FRow>& Row, FName Name) const
@@ -773,6 +832,10 @@ FText SScriptableDefinitionsEditor::GetNameError(const TSharedPtr<FRow>& Row, FN
 	{
 		return LOCTEXT("InvalidName", "Names can't contain symbols such as . / : ' \" ( ) [ ] < > = @ #");
 	}
+	if (Source->GetReservedNames(Tab).Contains(Name))
+	{
+		return FText::Format(LOCTEXT("ReservedName", "{0} is built in."), FText::FromName(Name));
+	}
 
 	// The row's own name is in the list once.
 	int32 Others = Name == GetRowName(Row) ? -1 : 0;
@@ -783,6 +846,16 @@ FText SScriptableDefinitionsEditor::GetNameError(const TSharedPtr<FRow>& Row, FN
 			for (const FKzNamedVariant& Local : *Locals)
 			{
 				Others += Local.GetName() == Name ? 1 : 0;
+			}
+		}
+	}
+	else if (Tab == ETab::Outputs)
+	{
+		if (const TArray<FName>* Outputs = Source->GetOutputs())
+		{
+			for (const FName& Output : *Outputs)
+			{
+				Others += Output == Name ? 1 : 0;
 			}
 		}
 	}
@@ -831,6 +904,10 @@ void SScriptableDefinitionsEditor::MoveEntry(const TSharedPtr<FRow>& SourceRow, 
 		{
 			Move(*Source->GetLocals());
 		}
+		else if (Tab == ETab::Outputs)
+		{
+			Move(*Source->GetOutputs());
+		}
 		else
 		{
 			EditContext([&Move](TArray<FKzParamDef>& Entries) { Move(Entries); });
@@ -840,7 +917,7 @@ void SScriptableDefinitionsEditor::MoveEntry(const TSharedPtr<FRow>& SourceRow, 
 
 void SScriptableDefinitionsEditor::AddEntry()
 {
-	const FText Description = Tab == ETab::Locals ? LOCTEXT("AddLocalTransaction", "Add Local") : LOCTEXT("AddContextTransaction", "Add Context Entry");
+	const FText Description = ScriptableDefinitionsEditor::ByTab(Tab, LOCTEXT("AddContextTransaction", "Add Context Entry"), LOCTEXT("AddLocalTransaction", "Add Local"), LOCTEXT("AddOutputTransaction", "Add Output"));
 	ApplyChange(Description, [this]()
 	{
 		if (Tab == ETab::Locals)
@@ -851,6 +928,12 @@ void SScriptableDefinitionsEditor::AddEntry()
 				return Locals.ContainsByPredicate([Candidate](const FKzNamedVariant& Local) { return Local.GetName() == Candidate; });
 			});
 			Locals.Add(FKzNamedVariant(Name, FKzVariant::Make<bool>(false)));
+			return;
+		}
+		if (Tab == ETab::Outputs)
+		{
+			TArray<FName>& Outputs = *Source->GetOutputs();
+			Outputs.Add(ScriptableDefinitionsEditor::MakeUniqueName(TEXT("NewOutput"), [&Outputs](FName Candidate) { return Outputs.Contains(Candidate); }));
 			return;
 		}
 

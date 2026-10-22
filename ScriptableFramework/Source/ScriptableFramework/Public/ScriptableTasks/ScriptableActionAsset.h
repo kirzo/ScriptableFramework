@@ -21,13 +21,6 @@ public:
 
 protected:
 	virtual FInstancedPropertyBag* GetContext() override { return &Action.GetContext(); }
-
-#if WITH_EDITOR
-	virtual FName GetContainerName() const override
-	{
-		return GET_MEMBER_NAME_CHECKED(UScriptableActionAsset, Action);
-	}
-#endif
 };
 
 UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Run Asset", Hidden))

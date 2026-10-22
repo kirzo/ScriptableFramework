@@ -3,8 +3,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Core/KzParamDef.h"
 #include "ScriptableObjectAsset.generated.h"
+
+struct FInstancedPropertyBag;
 
 /**
  * Base class for all Scriptable Assets (Actions, Requirements, etc).
@@ -24,24 +25,8 @@ public:
 
 #if WITH_EDITOR
 	virtual void GetAssetRegistryTags(FAssetRegistryTagsContext Context) const override;
-
-	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
-	virtual void PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent) override;
 #endif
 
-	/** Defines the context this asset expects. */
-	UPROPERTY(EditAnywhere, Category = "Config")
-	TArray<FKzParamDef> Context;
-
+	/** The context bag this asset expects, as binding discovery reads it. */
 	virtual FInstancedPropertyBag* GetContext() PURE_VIRTUAL(UScriptableObjectAsset::GetContext(), return nullptr;)
-
-protected:
-#if WITH_EDITOR
-	virtual FName GetContainerName() const PURE_VIRTUAL(UScriptableObjectAsset::GetContainerName(), return NAME_None;)
-#endif
-
-private:
-#if WITH_EDITOR
-	void RefreshContext();
-#endif
 };

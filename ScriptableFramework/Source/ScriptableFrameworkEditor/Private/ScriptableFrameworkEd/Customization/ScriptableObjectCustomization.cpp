@@ -1023,12 +1023,6 @@ private:
 // FScriptableObjectCustomization Implementation
 // ------------------------------------------------------------------------------------------------
 
-FScriptableObjectCustomization::~FScriptableObjectCustomization()
-{
-	// Clean up the global delegate
-	FCoreUObjectDelegates::OnObjectPropertyChanged.Remove(OnObjectPropertyChangedHandle);
-}
-
 void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> InPropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils)
 {
 	InitCustomization(InPropertyHandle, CustomizationUtils);
@@ -1119,9 +1113,6 @@ void FScriptableObjectCustomization::InitCustomization(TSharedRef<IPropertyHandl
 	{
 		NodeTitle = FText::FromString(TEXT("None"));
 	}
-
-	// Subscribe to global editor event
-	OnObjectPropertyChangedHandle = FCoreUObjectDelegates::OnObjectPropertyChanged.AddSP(this, &FScriptableObjectCustomization::OnObjectPropertyChanged);
 }
 
 void FScriptableObjectCustomization::ProcessPropertyHandle(TSharedRef<IPropertyHandle> SubPropertyHandle, IDetailChildrenBuilder& ChildBuilder, UScriptableObject* Obj, const TArray<FPropertyBindingBindableStructDescriptor>& AccessibleStructs)
@@ -1936,43 +1927,6 @@ void FScriptableObjectCustomization::InstantiateClass(const UClass* NewClass, TF
 		PropertyHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
 
 		if (PropertyUtilities) PropertyUtilities->ForceRefresh();
-	}
-}
-
-void FScriptableObjectCustomization::OnObjectPropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent)
-{
-	// Safety Checks
-	if (!ScriptableObject.IsValid() || !PropertyUtilities.IsValid())
-	{
-		return;
-	}
-
-	// Filter: Only care if the Object that changed is the Asset owning this Action
-	// (ScriptableObject->GetOuter() is the Asset)
-	if (InObject == ScriptableObject->GetOuter())
-	{
-		const FName PropertyName = (InEvent.Property) ? InEvent.Property->GetFName() : NAME_None;
-		const FName MemberName = (InEvent.MemberProperty) ? InEvent.MemberProperty->GetFName() : NAME_None;
-
-		// Filter
-		if (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context))
-		{
-			// This allows PostEditChangeProperty to fully complete (migrating the PropertyBag)
-			// before we try to read it again in the UI.
-			if (GEditor)
-			{
-				GEditor->GetTimerManager()->SetTimerForNextTick(FTimerDelegate::CreateSP(this, &FScriptableObjectCustomization::HandleForceRefresh));
-			}
-		}
-	}
-}
-
-void FScriptableObjectCustomization::HandleForceRefresh()
-{
-	// Check validity again as customization might have been destroyed in the meantime
-	if (PropertyUtilities.IsValid())
-	{
-		PropertyUtilities->ForceRefresh();
 	}
 }
 

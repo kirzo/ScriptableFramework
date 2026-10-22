@@ -17,7 +17,7 @@ class SHeaderRow;
 class SWindow;
 
 /**
- * Context and Locals of a definitions source in one widget, a tab each, as a table of name, type and, for Locals, initial value. Structural edits
+ * Context, Locals and, for a graph, Outputs of a definitions source in one widget, a tab each, as a table of name, type and, for Locals, initial value. Structural edits
  * work on the source directly, each an undoable change of its owners; initial values are edited through a row generator per Local.
  */
 class SScriptableDefinitionsEditor : public SCompoundWidget, public FNotifyHook, public FSelfRegisteringEditorUndoClient
@@ -30,8 +30,8 @@ public:
 	{
 		bool bEntry = false;
 
-		/** The Local's index, for Locals. */
-		int32 LocalIndex = INDEX_NONE;
+		/** The entry's index, for Locals and Outputs. */
+		int32 Index = INDEX_NONE;
 
 		/** The entry's name, for Context, whose entries have no stable index. */
 		FName ContextName;
@@ -80,6 +80,7 @@ public:
 
 private:
 	FKzNamedVariant* GetLocal(const FRow& Row) const;
+	FName* GetOutput(const FRow& Row) const;
 	TOptional<FKzParamDef> FindContext(FName Name) const;
 	FName GetRowName(const TSharedPtr<FRow>& Row) const;
 

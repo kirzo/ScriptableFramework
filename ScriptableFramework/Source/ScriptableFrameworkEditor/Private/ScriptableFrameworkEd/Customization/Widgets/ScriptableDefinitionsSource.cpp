@@ -4,10 +4,16 @@
 #include "ScriptableContainer.h"
 #include "ScriptableObject.h"
 #include "ScriptableRuntimeData.h"
+#include "ScriptableNodes/ScriptableGraph.h"
+#include "ScriptableNodes/ScriptableNode_Exit.h"
+#include "ScriptableNodes/ScriptableNode_Finish.h"
+#include "ScriptableNodes/ScriptableNode_Task.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
 #include "ScriptableTasks/ScriptableTask_CallFunction.h"
 #include "ScriptableTasks/ScriptableTask_SetLocal.h"
 #include "Bindings/ScriptablePropertyBindings.h"
 
+#include "EdGraph/EdGraph.h"
 #include "Misc/PackageName.h"
 #include "PropertyHandle.h"
 #include "UObject/UObjectHash.h"
@@ -34,6 +40,15 @@ namespace ScriptableDefinitionsSource
 		const TConstArrayView<FPropertyBindingPathSegment> Segments = Binding.SourcePath.GetSegments();
 		return Binding.SourceID == SourceID && Segments.Num() > 0 && Segments[0].GetName() == Name;
 	}
+
+	/** Whether the wire leaves the graph's Exit node from the output's pin. */
+	bool IsOutputWire(const UScriptableGraph& Graph, const FScriptableGraphConnection& Wire, FName Output)
+	{
+		return Wire.From.PinName == Output && Graph.Nodes.ContainsByPredicate([&Wire](const TObjectPtr<UScriptableNode>& Node)
+		{
+			return Node && Node->IsA<UScriptableNode_Exit>() && Node->GetBindingID() == Wire.From.NodeID;
+		});
+	}
 }
 
 const FGuid& FScriptableDefinitionsSource::GetSourceID(ETab Tab)
@@ -43,6 +58,11 @@ const FGuid& FScriptableDefinitionsSource::GetSourceID(ETab Tab)
 
 void FScriptableDefinitionsSource::RedirectReferences(ETab Tab, FName OldName, FName NewName)
 {
+	if (Tab == ETab::Outputs)
+	{
+		return;
+	}
+
 	const FGuid& SourceID = GetSourceID(Tab);
 	ForEachObjectInScope(Tab, [&](UScriptableObject& Object)
 	{
@@ -80,6 +100,11 @@ void FScriptableDefinitionsSource::RedirectReferences(ETab Tab, FName OldName, F
 
 int32 FScriptableDefinitionsSource::CountReferences(ETab Tab, FName Name) const
 {
+	if (Tab == ETab::Outputs)
+	{
+		return 0;
+	}
+
 	const FGuid& SourceID = GetSourceID(Tab);
 	int32 Count = 0;
 	ForEachObjectInScope(Tab, [&](UScriptableObject& Object)
@@ -283,6 +308,173 @@ void FScriptableContainerDefinitionsSource::ForEachObjectInScope(ETab Tab, TFunc
 	{
 		VisitContainer(*Current, ContainerStruct, Tab, Visit);
 	}
+}
+
+FScriptableGraphDefinitionsSource::FScriptableGraphDefinitionsSource(UScriptableGraph* InGraph)
+	: Graph(InGraph)
+{
+}
+
+FText FScriptableGraphDefinitionsSource::GetTitle() const
+{
+	return FText::Format(LOCTEXT("GraphTitle", "{0}: Context & Locals"), FText::FromString(GetNameSafe(Graph.Get())));
+}
+
+UPackage* FScriptableGraphDefinitionsSource::GetPackage() const
+{
+	const UScriptableGraph* Current = Graph.Get();
+	return Current ? Current->GetPackage() : nullptr;
+}
+
+TArray<FKzParamDef> FScriptableGraphDefinitionsSource::GetContext() const
+{
+	const UScriptableGraph* Current = Graph.Get();
+	return Current ? Current->Context : TArray<FKzParamDef>();
+}
+
+void FScriptableGraphDefinitionsSource::SetContext(const TArray<FKzParamDef>& Entries)
+{
+	if (UScriptableGraph* Current = Graph.Get())
+	{
+		Current->Context = Entries;
+	}
+}
+
+TArray<FKzNamedVariant>* FScriptableGraphDefinitionsSource::GetLocals() const
+{
+	UScriptableGraph* Current = Graph.Get();
+	return Current ? &Current->Locals : nullptr;
+}
+
+TArray<FName>* FScriptableGraphDefinitionsSource::GetOutputs() const
+{
+	UScriptableGraph* Current = Graph.Get();
+	return Current ? &Current->Outputs : nullptr;
+}
+
+TArray<FName> FScriptableGraphDefinitionsSource::GetReservedNames(ETab Tab) const
+{
+	// Pins every Exit and SubGraph node already has.
+	if (Tab == ETab::Outputs)
+	{
+		return { UScriptableNode_Exit::FinishedOutputName, UScriptableNode_Exit::CancelledOutputName, UScriptableNode::StoppedOutputName };
+	}
+	return {};
+}
+
+void FScriptableGraphDefinitionsSource::BeginChange(ETab Tab)
+{
+	if (UScriptableGraph* Current = Graph.Get())
+	{
+		Current->Modify();
+	}
+}
+
+void FScriptableGraphDefinitionsSource::EndChange(ETab Tab)
+{
+	UScriptableGraph* Current = Graph.Get();
+	if (!Current)
+	{
+		return;
+	}
+
+	// The graph rebuilds its bags and re-bakes its nodes from here, and the graph editor rebuilds its Exit nodes from the same event.
+	const FName PropertyName = Tab == ETab::Locals ? GET_MEMBER_NAME_CHECKED(UScriptableGraph, Locals)
+		: Tab == ETab::Outputs ? GET_MEMBER_NAME_CHECKED(UScriptableGraph, Outputs)
+		: GET_MEMBER_NAME_CHECKED(UScriptableGraph, Context);
+	FPropertyChangedEvent Event(FindFProperty<FProperty>(UScriptableGraph::StaticClass(), PropertyName), EPropertyChangeType::ValueSet);
+	Current->PostEditChangeProperty(Event);
+}
+
+void FScriptableGraphDefinitionsSource::ForEachObjectInScope(ETab Tab, TFunctionRef<void(UScriptableObject&)> Visit) const
+{
+	UScriptableGraph* Current = Graph.Get();
+	if (!Current)
+	{
+		return;
+	}
+
+	for (UScriptableNode* Node : Current->Nodes)
+	{
+		if (!Node)
+		{
+			continue;
+		}
+
+		VisitObject(*Node, Tab, Visit);
+		const UScriptableNode_Task* TaskNode = Cast<UScriptableNode_Task>(Node);
+		if (TaskNode && TaskNode->Task)
+		{
+			VisitObject(*TaskNode->Task, Tab, Visit);
+		}
+	}
+}
+
+void FScriptableGraphDefinitionsSource::RedirectReferences(ETab Tab, FName OldName, FName NewName)
+{
+	UScriptableGraph* Current = Graph.Get();
+	if (Tab != ETab::Outputs || !Current)
+	{
+		FScriptableDefinitionsSource::RedirectReferences(Tab, OldName, NewName);
+		return;
+	}
+
+	for (UScriptableNode* Node : Current->Nodes)
+	{
+		UScriptableNode_Finish* Finish = Cast<UScriptableNode_Finish>(Node);
+		if (Finish && Finish->OutputName == OldName)
+		{
+			Finish->Modify();
+			Finish->OutputName = NewName;
+		}
+	}
+
+	// BeginChange snapshot the wires with the graph; undo rebuilds the ed-graph from them.
+	for (FScriptableGraphConnection& Wire : Current->Connections)
+	{
+		if (ScriptableDefinitionsSource::IsOutputWire(*Current, Wire, OldName))
+		{
+			Wire.From.PinName = NewName;
+		}
+	}
+
+	// The Exit ed-node keeps its links through the rebuild only if its pin already has the new name.
+	if (Current->EdGraph)
+	{
+		for (UEdGraphNode* EdNode : Current->EdGraph->Nodes)
+		{
+			const UScriptableEdGraphNode* ScriptableEdNode = Cast<UScriptableEdGraphNode>(EdNode);
+			if (!ScriptableEdNode || !ScriptableEdNode->GetRuntimeNode() || !ScriptableEdNode->GetRuntimeNode()->IsA<UScriptableNode_Exit>())
+			{
+				continue;
+			}
+			if (UEdGraphPin* Pin = EdNode->FindPin(OldName, EGPD_Output))
+			{
+				Pin->PinName = NewName;
+			}
+		}
+	}
+}
+
+int32 FScriptableGraphDefinitionsSource::CountReferences(ETab Tab, FName Name) const
+{
+	const UScriptableGraph* Current = Graph.Get();
+	if (Tab != ETab::Outputs || !Current)
+	{
+		return FScriptableDefinitionsSource::CountReferences(Tab, Name);
+	}
+
+	int32 Count = 0;
+	for (const UScriptableNode* Node : Current->Nodes)
+	{
+		const UScriptableNode_Finish* Finish = Cast<UScriptableNode_Finish>(Node);
+		Count += Finish && Finish->OutputName == Name ? 1 : 0;
+	}
+	for (const FScriptableGraphConnection& Wire : Current->Connections)
+	{
+		Count += ScriptableDefinitionsSource::IsOutputWire(*Current, Wire, Name) ? 1 : 0;
+	}
+	return Count;
 }
 
 #undef LOCTEXT_NAMESPACE
