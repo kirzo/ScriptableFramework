@@ -68,9 +68,7 @@ void UScriptableGraph::PostEditChangeProperty(FPropertyChangedEvent& PropertyCha
 	const FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
 	const FName MemberName = (PropertyChangedEvent.MemberProperty != nullptr) ? PropertyChangedEvent.MemberProperty->GetFName() : NAME_None;
 
-	// FKzNamedVariant has no custom IPropertyTypeCustomization, so editing its Name through the default property editor
-	// fires PostEditChangeProperty without going through PostEditChangeChainProperty. We do all rename + snapshot +
-	// rebuild work here so both paths (customization-driven and default-editor-driven) end up calling the same code.
+	// Every edit of Context or Locals reaches here, whichever path it takes, so renames and rebuilds all happen here.
 	const bool bContextEdit = (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context) || MemberName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context));
 	if (bContextEdit)
 	{

@@ -5,10 +5,7 @@
 #include "CoreMinimal.h"
 #include "ScriptableTaskCustomization.h"
 
-/**
- * Customization for UScriptableTask_SetLocal: swaps the plain VarName dropdown for a
- * type-aware picker that shows each Local's pin icon and color.
- */
+/** Customization for UScriptableTask_SetLocal: VarName and Value as one row, the type-aware local picker on the left and the value on the right. */
 class FScriptableTaskSetLocalCustomization : public FScriptableTaskCustomization
 {
 public:

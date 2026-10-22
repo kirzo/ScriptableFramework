@@ -20,11 +20,11 @@ class SCRIPTABLEFRAMEWORK_API UScriptableTask_SetLocal : public UScriptableTask
 public:
 	UScriptableTask_SetLocal();
 
-	/** Target local. UE renders this as a dropdown driven by GetLocalNames over the owning asset's Locals. */
+	/** The local written. */
 	UPROPERTY(EditAnywhere, Category = "Set Local", meta = (NoBinding, GetOptions = "GetLocalNames"))
 	FName VarName = NAME_None;
 
-	/** Value to write. FixedType meta hides FKzVariant's type selector; PostEditChangeProperty force-syncs Type to the picked local. */
+	/** Value written, retyped after the local whenever it changes. */
 	UPROPERTY(EditAnywhere, Category = "Set Local", meta = (NoBinding, FixedType))
 	FKzVariant Value;
 
