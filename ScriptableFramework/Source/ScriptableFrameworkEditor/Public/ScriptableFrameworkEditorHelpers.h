@@ -10,6 +10,7 @@ class UScriptableObject;
 class UScriptableGraph;
 struct FPropertyBindingBindableStructDescriptor;
 struct FBindingChainElement;
+struct FKzValidationIssue;
 
 namespace ScriptableFrameworkEditor
 {
@@ -50,6 +51,9 @@ namespace ScriptableFrameworkEditor
 	/** Helper to set the internal asset on wrapper tasks. */
 	void SetWrapperAssetProperty(TSharedPtr<IPropertyHandle> Handle, UObject* Asset);
 
-	/** BFS over Graph->Connections from EntryNodeID + every ReceiveEvent + Exit. Used by every compile pass to drop issues on unreachable nodes (BP behaviour). */
+	/** BFS over Graph->Connections from EntryNodeID + every ReceiveEvent + Exit. */
 	TSet<FGuid> ComputeReachableNodeIds(const UScriptableGraph* Graph);
+
+	/** Drops Issues[FirstIndex..] on nodes the graph cannot reach (BP behaviour); graph-level issues (no ContextId) stay. The graph validators call it, so the panel, banners, compile and save agree. */
+	void DropUnreachableIssues(const UScriptableGraph* Graph, TArray<FKzValidationIssue>& Issues, int32 FirstIndex);
 }

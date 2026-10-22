@@ -13,6 +13,8 @@
 #include "ScriptableTasks/ScriptableTask_RunGraph.h"
 #include "ScriptableTasks/ScriptableTask_SetLocal.h"
 #include "Core/KzNamedVariant.h"
+#include "ScriptableFrameworkEditorHelpers.h"
+#include "Misc/ScopeExit.h"
 #include "ScopedTransaction.h"
 
 #define LOCTEXT_NAMESPACE "ScriptableGraphValidator"
@@ -123,6 +125,9 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 {
 	const UScriptableGraph* Graph = Cast<UScriptableGraph>(Asset);
 	if (!Graph) return;
+
+	const int32 FirstIssue = OutIssues.Num();
+	ON_SCOPE_EXIT { ScriptableFrameworkEditor::DropUnreachableIssues(Graph, OutIssues, FirstIssue); };
 
 	// --- Node-by-GUID lookup. Duplicate IDs corrupt connection routing (error); first occurrence wins. ---
 	TMap<FGuid, const UScriptableNode*> NodesByGuid;

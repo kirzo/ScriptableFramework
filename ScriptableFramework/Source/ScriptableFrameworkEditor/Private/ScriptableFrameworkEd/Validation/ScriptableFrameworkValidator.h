@@ -9,7 +9,7 @@
 /**
  * Global save-time validator: runs the shared binding pass on any asset that may
  * nest UScriptableObjects and forwards issues to the message log. UScriptableGraph
- * assets are skipped — their dedicated editor panel owns the experience instead.
+ * assets are skipped: their UKzAssetValidators run through KzLib's bridge instead.
  */
 UCLASS()
 class UScriptableFrameworkValidator : public UEditorValidatorBase

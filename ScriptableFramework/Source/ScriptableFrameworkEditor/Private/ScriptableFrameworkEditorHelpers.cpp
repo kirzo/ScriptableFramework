@@ -13,6 +13,7 @@
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
 #include "ScriptableNodes/ScriptableNode_Exit.h"
 #include "ScriptableNodes/ScriptableGraphConnection.h"
+#include "Core/KzValidationTypes.h"
 #include "StructUtils/InstancedStruct.h"
 #include "IPropertyAccessEditor.h"
 #include "PropertyBindingBindableStructDescriptor.h"
@@ -350,5 +351,17 @@ namespace ScriptableFrameworkEditor
 		}
 
 		return Reachable;
+	}
+
+	void DropUnreachableIssues(const UScriptableGraph* Graph, TArray<FKzValidationIssue>& Issues, int32 FirstIndex)
+	{
+		const TSet<FGuid> Reachable = ComputeReachableNodeIds(Graph);
+		for (int32 i = Issues.Num() - 1; i >= FirstIndex; --i)
+		{
+			if (Issues[i].ContextId.IsValid() && !Reachable.Contains(Issues[i].ContextId))
+			{
+				Issues.RemoveAt(i);
+			}
+		}
 	}
 }

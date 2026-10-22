@@ -167,14 +167,9 @@ void FScriptableFrameworkEditorModule::HandleGraphPostLoaded(UScriptableGraph* A
 			UScriptableGraph* Graph = WeakAsset.Get();
 			if (!Graph) return false;
 
-			const TArray<FKzValidationIssue> RawIssues = FKzAssetValidationUtils::RunValidation(Graph);
-			const TSet<FGuid> Reachable = ScriptableFrameworkEditor::ComputeReachableNodeIds(Graph);
-
-			const bool bHasError = RawIssues.ContainsByPredicate([&](const FKzValidationIssue& Issue)
+			const bool bHasError = FKzAssetValidationUtils::RunValidation(Graph).ContainsByPredicate([](const FKzValidationIssue& Issue)
 				{
-					if (Issue.Severity != EKzValidationSeverity::Error) return false;
-					if (Issue.ContextId.IsValid() && !Reachable.Contains(Issue.ContextId)) return false;
-					return true;
+					return Issue.Severity == EKzValidationSeverity::Error;
 				});
 
 			/** Passive refresh: update the in-memory flag only. The asset-open compile and the Compile button persist it. */

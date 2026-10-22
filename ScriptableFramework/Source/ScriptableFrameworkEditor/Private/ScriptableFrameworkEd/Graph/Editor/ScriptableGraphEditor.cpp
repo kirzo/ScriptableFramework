@@ -2121,21 +2121,8 @@ void FScriptableGraphEditor::RunCompile(bool bMarkPackageDirty)
 	UScriptableGraph* Graph = EditedGraph.Get();
 	if (!Graph) return;
 
-	const TArray<FKzValidationIssue> RawIssues = FKzAssetValidationUtils::RunValidation(Graph);
-
-	/**
-	 * Drop issues on unreachable nodes (BP behaviour): they don't appear in the panel, don't paint the
-	 * ERROR! banner, and don't flip bLastCompileFailed. Graph-level issues (no ContextId) are kept.
-	 */
-	const TSet<FGuid> ReachableNodeIds = ScriptableFrameworkEditor::ComputeReachableNodeIds(Graph);
-
-	TArray<FKzValidationIssue> Issues;
-	Issues.Reserve(RawIssues.Num());
-	for (const FKzValidationIssue& Issue : RawIssues)
-	{
-		if (Issue.ContextId.IsValid() && !ReachableNodeIds.Contains(Issue.ContextId)) continue;
-		Issues.Add(Issue);
-	}
+	// The graph validators already drop issues on unreachable nodes (BP behaviour).
+	const TArray<FKzValidationIssue> Issues = FKzAssetValidationUtils::RunValidation(Graph);
 
 	const bool bHasError = Issues.ContainsByPredicate(
 		[](const FKzValidationIssue& Issue) { return Issue.Severity == EKzValidationSeverity::Error; });
@@ -2213,18 +2200,7 @@ void FScriptableGraphEditor::RefreshErrorBanners()
 	UScriptableGraph* Graph = EditedGraph.Get();
 	if (!Graph) return;
 
-	const TArray<FKzValidationIssue> RawIssues = FKzAssetValidationUtils::RunValidation(Graph);
-	const TSet<FGuid> ReachableNodeIds = ScriptableFrameworkEditor::ComputeReachableNodeIds(Graph);
-
-	TArray<FKzValidationIssue> Issues;
-	Issues.Reserve(RawIssues.Num());
-	for (const FKzValidationIssue& Issue : RawIssues)
-	{
-		if (Issue.ContextId.IsValid() && !ReachableNodeIds.Contains(Issue.ContextId)) continue;
-		Issues.Add(Issue);
-	}
-
-	ApplyValidationToErrorBanners(Issues);
+	ApplyValidationToErrorBanners(FKzAssetValidationUtils::RunValidation(Graph));
 }
 
 void FScriptableGraphEditor::ApplyValidationToErrorBanners(const TArray<FKzValidationIssue>& Issues)
@@ -2496,22 +2472,8 @@ TArray<FKzValidationIssue> FScriptableGraphEditor::HandleRunValidation()
 	UScriptableGraph* Graph = EditedGraph.Get();
 	if (!Graph) return {};
 
-	/**
-	 * Same reachability filter as RunCompile so the panel and ERROR! banners stay consistent regardless
-	 * of who triggered the refresh (panel button, quick-fix re-validation, etc.). Does NOT persist
-	 * bLastCompileFailed — that stays the user's last explicit Compile result.
-	 */
-	const TArray<FKzValidationIssue> RawIssues = FKzAssetValidationUtils::RunValidation(Graph);
-	const TSet<FGuid> ReachableNodeIds = ScriptableFrameworkEditor::ComputeReachableNodeIds(Graph);
-
-	TArray<FKzValidationIssue> Issues;
-	Issues.Reserve(RawIssues.Num());
-	for (const FKzValidationIssue& Issue : RawIssues)
-	{
-		if (Issue.ContextId.IsValid() && !ReachableNodeIds.Contains(Issue.ContextId)) continue;
-		Issues.Add(Issue);
-	}
-
+	// Does NOT persist bLastCompileFailed: that stays the user's last explicit Compile result.
+	const TArray<FKzValidationIssue> Issues = FKzAssetValidationUtils::RunValidation(Graph);
 	ApplyValidationToErrorBanners(Issues);
 
 	/** Quick-fixes mutate state outside the details panel's UI; force a rebuild so cached row state catches up. */
