@@ -1,6 +1,7 @@
 // Copyright 2026 kirzo
 
 #include "Tasks/ScriptableTask_SetLimbicSlot.h"
+#include "Components/KzDatabaseComponent.h"
 #include "GameFramework/Actor.h"
 #include "LimbicPuppeteer.h"
 
@@ -49,7 +50,8 @@ void UScriptableTask_SetLimbicSlot::BeginTask()
 			}
 		}
 
-		Handle = ULimbicSlotLibrary::SetLimbicSlotOnActor(TargetActor, Slot, Puppeteer, BlendTime, SlotParameters);
+		ULimbicPuppeteer* Played = UKzDatabaseComponent::ResolveFor(TargetActor.Get(), PuppeteerQuery, TSoftObjectPtr<ULimbicPuppeteer>(Puppeteer)).LoadSynchronous();
+		Handle = ULimbicSlotLibrary::SetLimbicSlotOnActor(TargetActor, Slot, Played ? Played : Puppeteer.Get(), BlendTime, SlotParameters);
 	}
 
 	// Holding nothing there is nothing to wait for
