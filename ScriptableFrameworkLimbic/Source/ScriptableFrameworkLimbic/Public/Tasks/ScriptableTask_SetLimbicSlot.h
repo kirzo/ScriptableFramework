@@ -3,7 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Core/KzDatabase.h"
 #include "GameplayTagContainer.h"
 #include "LimbicSlotLibrary.h"
 #include "ScriptableTasks/ScriptableTask.h"
@@ -26,13 +25,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Slot", meta = (Categories = "Limbic.Slot"))
 	FGameplayTag Slot;
 
-	/** Puppeteer held in the slot, unless the target's database answers PuppeteerQuery with its own. Parameters mirror its exposed parameters. */
+	/** Puppeteer held in the slot. Parameters mirror its exposed parameters. */
 	UPROPERTY(EditAnywhere, Category = "Slot", meta = (NoBinding))
 	TObjectPtr<ULimbicPuppeteer> Puppeteer;
-
-	/** Asks the target's database for its puppeteer, such as RequireTags Pose.Hold.Table; the target's state picks the variant. Empty asks nothing. Parameters go by name to whichever plays. */
-	UPROPERTY(EditAnywhere, Category = "Slot")
-	FKzDatabaseQuery PuppeteerQuery;
 
 	UPROPERTY(EditAnywhere, Category = "Slot", meta = (ClampMin = "0", Units = "Seconds"))
 	float BlendTime = 0.25f;
