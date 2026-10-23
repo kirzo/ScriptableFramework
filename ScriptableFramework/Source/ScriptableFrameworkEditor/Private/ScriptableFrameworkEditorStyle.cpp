@@ -73,6 +73,7 @@ FScriptableFrameworkEditorStyle::FScriptableFrameworkEditorStyle()
 		{ TEXT("ScriptableFrameworkUI"), TEXT("ScriptableTask_CreateWidget"), TEXT("ScriptableTask_CreateWidget") },
 		{ TEXT("ScriptableFrameworkUI"), TEXT("ScriptableTask_RemoveWidget"), TEXT("ScriptableTask_RemoveWidget") },
 		{ TEXT("ScriptableFrameworkLimbic"), TEXT("ScriptableTask_SetLimbicSlot"), TEXT("ScriptableTask_SetLimbicSlot") },
+		{ TEXT("ScriptableFrameworkLimbic"), TEXT("ScriptableTask_SetLimbicSlotByQuery"), TEXT("ScriptableTask_SetLimbicSlot") },
 		{ TEXT("ScriptableFrameworkLimbic"), TEXT("ScriptableTask_StopLimbicSlot"), TEXT("ScriptableTask_StopLimbicSlot") },
 		{ TEXT("ScriptableFrameworkLimbic"), TEXT("ScriptableTask_StopLimbicSlotByHandle"), TEXT("ScriptableTask_StopLimbicSlot") },
 		{ TEXT("ScriptableFrameworkLimbic"), TEXT("ScriptableTask_MakeLimbicTarget"), TEXT("ScriptableTask_MakeLimbicTarget") },

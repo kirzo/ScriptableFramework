@@ -40,24 +40,20 @@ FText UScriptableTask_SetLimbicSlotByQuery::GetDisplayTitle() const
 	return FText::Format(bHoldUntilStopped ? INVTEXT("Hold Limbic Slot {0} by {1}") : INVTEXT("Set Limbic Slot {0} by {1}"), SlotName, Asked);
 }
 
-void UScriptableTask_SetLimbicSlotByQuery::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+void UScriptableTask_SetLimbicSlotByQuery::AddParametersFrom(ULimbicPuppeteer* Puppeteer)
 {
-	Super::PostEditChangeProperty(PropertyChangedEvent);
-
-	if (PropertyChangedEvent.GetPropertyName() != GET_MEMBER_NAME_CHECKED(UScriptableTask_SetLimbicSlotByQuery, AddParametersFrom) || !AddParametersFrom)
+	const UPropertyBag* Compiled = Puppeteer ? Puppeteer->CompiledParameters.GetPropertyBagStruct() : nullptr;
+	if (!Compiled)
 	{
 		return;
 	}
 
 	TArray<FPropertyBagPropertyDesc> Missing;
-	if (const UPropertyBag* Compiled = AddParametersFrom->CompiledParameters.GetPropertyBagStruct())
+	for (const FPropertyBagPropertyDesc& Desc : Compiled->GetPropertyDescs())
 	{
-		for (const FPropertyBagPropertyDesc& Desc : Compiled->GetPropertyDescs())
+		if (ULimbicPuppeteer::IsParameterExposed(Desc) && !Parameters.FindPropertyDescByName(Desc.Name))
 		{
-			if (ULimbicPuppeteer::IsParameterExposed(Desc) && !Parameters.FindPropertyDescByName(Desc.Name))
-			{
-				Missing.Add(Desc);
-			}
+			Missing.Add(Desc);
 		}
 	}
 
@@ -66,10 +62,9 @@ void UScriptableTask_SetLimbicSlotByQuery::PostEditChangeProperty(FPropertyChang
 		// The new ones take the puppeteer's defaults; the ones already there keep their values.
 		FInstancedPropertyBag Defaults;
 		Defaults.AddProperties(Missing);
-		Defaults.CopyMatchingValuesByID(AddParametersFrom->CompiledParameters);
+		Defaults.CopyMatchingValuesByID(Puppeteer->CompiledParameters);
 		Parameters.AddProperties(Missing);
 		Parameters.CopyMatchingValuesByName(Defaults);
 	}
-	AddParametersFrom = nullptr;
 }
 #endif

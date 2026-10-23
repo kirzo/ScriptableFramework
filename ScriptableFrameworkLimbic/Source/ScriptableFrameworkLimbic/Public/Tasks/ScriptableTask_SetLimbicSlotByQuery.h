@@ -47,15 +47,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Slot", meta = (NoBinding))
 	bool bHoldUntilStopped = false;
 
-	/** Values sent by name to whichever puppeteer plays; it takes those it has. */
-	UPROPERTY(EditAnywhere, Category = "Slot")
+	/** Values sent by name to whichever puppeteer plays; it takes those it has. The header's import button adds a puppeteer's. */
+	UPROPERTY(EditAnywhere, Category = "Slot", meta = (AddFrom = "AddParametersFrom"))
 	FInstancedPropertyBag Parameters;
-
-#if WITH_EDITORONLY_DATA
-	/** Pick a puppeteer to add its exposed parameters that Parameters lacks, at their defaults; then it clears itself. */
-	UPROPERTY(EditAnywhere, Transient, Category = "Slot", meta = (NoBinding))
-	TObjectPtr<ULimbicPuppeteer> AddParametersFrom;
-#endif
 
 	/** The play this task started, for Stop Limbic Slot to stop it alone. */
 	UPROPERTY(VisibleAnywhere, Transient, BlueprintReadOnly, Category = "Output")
@@ -70,6 +64,9 @@ protected:
 #if WITH_EDITOR
 public:
 	virtual FText GetDisplayTitle() const override;
-	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+
+	/** Adds the puppeteer's exposed parameters that Parameters lacks, at their defaults. */
+	UFUNCTION()
+	void AddParametersFrom(ULimbicPuppeteer* Puppeteer);
 #endif
 };

@@ -16,6 +16,9 @@
 
 #include "Widgets/SScriptableTypePicker.h"
 #include "PropertyCustomizationHelpers.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Widgets/Images/SImage.h"
+#include "Widgets/Input/SComboButton.h"
 
 #include "Utils/KzEditorUtils.h"
 #include "StructUtils/PropertyBag.h"
@@ -652,14 +655,29 @@ namespace ScriptableBindingUI
 	{
 		if (!ScriptableObject || !CachedData.IsValid()) return;
 
+		// Keep the widgets a customization already built for the row, such as a bag member's name with its type and rename menu.
 		TSharedPtr<SWidget> NameWidget, ValueWidget;
-		Row.GetDefaultWidgets(NameWidget, ValueWidget);
+		EHorizontalAlignment NameAlignment = HAlign_Left;
+		EHorizontalAlignment ValueAlignment = HAlign_Left;
+		const FDetailWidgetDecl* CustomName = Row.CustomNameWidget();
+		const FDetailWidgetDecl* CustomValue = Row.CustomValueWidget();
+		if (CustomName && CustomValue)
+		{
+			NameWidget = CustomName->Widget;
+			ValueWidget = CustomValue->Widget;
+			NameAlignment = CustomName->HorizontalAlignment;
+			ValueAlignment = CustomValue->HorizontalAlignment;
+		}
+		else
+		{
+			Row.GetDefaultWidgets(NameWidget, ValueWidget);
+		}
 
 		// Initialize custom row
 		FDetailWidgetRow& NodeRow = Row.CustomWidget(true);
 
-		NodeRow.NameContent()[NameWidget.IsValid() ? NameWidget.ToSharedRef() : SNullWidget::NullWidget];
-		NodeRow.ValueContent()[ValueWidget.IsValid() ? ValueWidget.ToSharedRef() : SNullWidget::NullWidget];
+		NodeRow.NameContent().HAlign(NameAlignment)[NameWidget.IsValid() ? NameWidget.ToSharedRef() : SNullWidget::NullWidget];
+		NodeRow.ValueContent().HAlign(ValueAlignment)[ValueWidget.IsValid() ? ValueWidget.ToSharedRef() : SNullWidget::NullWidget];
 
 		GenerateRowContent(ScriptableObject, NodeRow, CachedData);
 	}
@@ -990,14 +1008,31 @@ public:
 				BagHandle->CreatePropertyNameWidget()
 			];
 
+		const TSharedRef<SHorizontalBox> Buttons = SNew(SHorizontalBox);
 		if (!bFixedLayout)
 		{
-			NodeRow.ValueContent()
+			Buttons->AddSlot()
+				.AutoWidth()
 				.VAlign(VAlign_Center)
 				[
 					FPropertyBagDetails::MakeAddPropertyWidget(BagHandle, PropertyUtilities).ToSharedRef()
 				];
 		}
+		if (const UFunction* AddFrom = GetAddFromFunction())
+		{
+			Buttons->AddSlot()
+				.AutoWidth()
+				.VAlign(VAlign_Center)
+				.Padding(4.0f, 0.0f, 0.0f, 0.0f)
+				[
+					MakeAddFromButton(AddFrom)
+				];
+		}
+		NodeRow.ValueContent()
+			.VAlign(VAlign_Center)
+			[
+				Buttons
+			];
 	}
 
 	virtual void GenerateChildContent(IDetailChildrenBuilder& ChildrenBuilder) override
@@ -1011,6 +1046,62 @@ public:
 	}
 
 private:
+	/** The object's function the bag's AddFrom metadata names: one object parameter, whose class the button picks assets of. */
+	const UFunction* GetAddFromFunction() const
+	{
+		const FProperty* MetaDataProperty = BagHandle->GetMetaDataProperty();
+		const UScriptableObject* Object = Obj.Get();
+		const UFunction* Function = MetaDataProperty && Object && MetaDataProperty->HasMetaData(TEXT("AddFrom")) ? Object->FindFunction(FName(MetaDataProperty->GetMetaData(TEXT("AddFrom")))) : nullptr;
+		return Function && Function->NumParms == 1 && CastField<FObjectPropertyBase>(Function->PropertyLink) ? Function : nullptr;
+	}
+
+	/** A dropdown of the assets the function takes: picking one calls it, as one undoable change of the bag. */
+	TSharedRef<SWidget> MakeAddFromButton(const UFunction* Function)
+	{
+		const FObjectPropertyBase* Param = CastFieldChecked<FObjectPropertyBase>(Function->PropertyLink);
+		const UClass* AssetClass = Param->PropertyClass;
+		const FName FunctionName = Function->GetFName();
+
+		return SNew(SComboButton)
+			.ComboButtonStyle(FAppStyle::Get(), "SimpleComboButton")
+			.HasDownArrow(false)
+			.ToolTipText(FText::Format(LOCTEXT("AddFromTooltip", "Add the parameters of a {0}"), AssetClass->GetDisplayNameText()))
+			.ButtonContent()
+			[
+				SNew(SImage)
+				.Image(FAppStyle::GetBrush("Icons.Import"))
+				.ColorAndOpacity(FSlateColor::UseForeground())
+			]
+			.OnGetMenuContent_Lambda([this, AssetClass, FunctionName]()
+			{
+				// Typed arrays, or the overload with an AllowCopyPaste bool in third place takes the class list for it.
+				const TArray<const UClass*> AllowedClasses = { AssetClass };
+				return PropertyCustomizationHelpers::MakeAssetPickerWithMenu(FAssetData(), /*bAllowClear=*/false, AllowedClasses, TArray<UFactory*>(), FOnShouldFilterAsset(),
+					FOnAssetSelected::CreateLambda([this, FunctionName](const FAssetData& AssetData)
+					{
+						UScriptableObject* Object = Obj.Get();
+						UObject* Asset = AssetData.GetAsset();
+						UFunction* Function = Object ? Object->FindFunction(FunctionName) : nullptr;
+						if (!Function || !Asset)
+						{
+							return;
+						}
+
+						const FScopedTransaction Transaction(FText::Format(LOCTEXT("AddFromTransaction", "Add Parameters From {0}"), FText::FromString(Asset->GetName())));
+						BagHandle->NotifyPreChange();
+
+						uint8* Params = static_cast<uint8*>(FMemory_Alloca(Function->ParmsSize));
+						FMemory::Memzero(Params, Function->ParmsSize);
+						CastFieldChecked<FObjectPropertyBase>(Function->PropertyLink)->SetObjectPropertyValue_InContainer(Params, Asset);
+						Object->ProcessEvent(Function, Params);
+
+						BagHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
+						FSlateApplication::Get().DismissAllMenus();
+					}),
+					FSimpleDelegate());
+			});
+	}
+
 	TSharedRef<IPropertyHandle> BagHandle;
 	TWeakObjectPtr<UScriptableObject> Obj;
 	TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
